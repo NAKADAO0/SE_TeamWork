@@ -42,3 +42,5 @@ python -m uvicorn backend.api:app --host 127.0.0.1 --port 8010
 ~~~
 
 成员 1、3、6 可在 /docs 调用 GET /plans/chat-demo?revision=1。响应包含 plan_id、revision 和 plan；plan.tasks 含 8 个节点，plan.batches 为批次。省略 revision 返回最新版本。数据库默认保存在 .local/plans.sqlite3，可用 PLAN_DB 指定路径。运行 python -m unittest discover -s tests -p test_plans.py 执行 API 测试。
+
+修改计划时先 GET，再用 PUT /plans/chat-demo 提交 {"expected_revision":1,"plan":完整编辑后的计划对象}。成功返回新 revision 和草稿；原修订仍可查询，草稿需重新编排。若返回 409，读取 detail.current_revision，重新载入当前内容，核对差异后再保存。
