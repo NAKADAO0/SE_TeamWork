@@ -38,4 +38,6 @@ $("save").onclick=()=>{
   const url=URL.createObjectURL(new Blob([JSON.stringify(plan,null,2)],{type:"application/json"}));
   const link=document.createElement("a");link.href=url;link.download="plan.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
+const selected = new URLSearchParams(location.search).get("sample");
+if (["chat", "community"].includes(selected)) $("sample").value = selected;
 load();
