@@ -1,0 +1,134 @@
+{
+  "mode": "curated_example",
+  "spec": {
+    "product": "聊天 MVP",
+    "requirements": [
+      {
+        "id": "R1",
+        "goal": "发送文本消息",
+        "acceptance": "发送后可查到相同消息 ID"
+      },
+      {
+        "id": "R2",
+        "goal": "分页读取会话",
+        "acceptance": "翻页无重复消息"
+      }
+    ],
+    "scope": "复用登录会话，支持单聊文本消息、历史分页及会话隔离。"
+  },
+  "capacity": 2,
+  "tasks": [
+    {
+      "id": "C1",
+      "source": "R1",
+      "title": "定义消息与会话契约",
+      "role": "backend",
+      "depends_on": [],
+      "output": "接口契约",
+      "acceptance": "发送响应及查询结果共用消息 ID"
+    },
+    {
+      "id": "C2",
+      "source": "R1",
+      "title": "实现消息写入与鉴权",
+      "role": "backend",
+      "depends_on": [
+        "C1"
+      ],
+      "output": "消息服务",
+      "acceptance": "非会话成员写入被拒绝"
+    },
+    {
+      "id": "C3",
+      "source": "R1",
+      "title": "开发聊天输入与发送状态",
+      "role": "frontend",
+      "depends_on": [
+        "C1"
+      ],
+      "output": "会话页面",
+      "acceptance": "失败可重试且保留原文"
+    },
+    {
+      "id": "C4",
+      "source": "R2",
+      "title": "实现游标历史查询",
+      "role": "backend",
+      "depends_on": [
+        "C2"
+      ],
+      "output": "分页接口",
+      "acceptance": "连续两页没有重复消息"
+    },
+    {
+      "id": "C5",
+      "source": "R2",
+      "title": "接入历史列表与加载更多",
+      "role": "frontend",
+      "depends_on": [
+        "C3",
+        "C4"
+      ],
+      "output": "历史列表",
+      "acceptance": "加载旧消息时保留当前阅读位置"
+    },
+    {
+      "id": "C6",
+      "source": "R1",
+      "title": "验证发送与会话隔离",
+      "role": "qa",
+      "depends_on": [
+        "C2",
+        "C3"
+      ],
+      "output": "消息测试记录",
+      "acceptance": "本会话查到已发送 ID，其他会话不可见"
+    },
+    {
+      "id": "C7",
+      "source": "R2",
+      "title": "验证分页边界",
+      "role": "qa",
+      "depends_on": [
+        "C4",
+        "C5"
+      ],
+      "output": "分页测试记录",
+      "acceptance": "空会话、末页与连续翻页均符合契约"
+    },
+    {
+      "id": "C8",
+      "source": "R1、R2",
+      "title": "联调发送到历史回读",
+      "role": "qa",
+      "depends_on": [
+        "C6",
+        "C7"
+      ],
+      "output": "端到端验收清单",
+      "acceptance": "发送后刷新与翻页仍可按 ID 定位同一消息"
+    }
+  ],
+  "batches": [
+    [
+      "C1"
+    ],
+    [
+      "C2",
+      "C3"
+    ],
+    [
+      "C4",
+      "C6"
+    ],
+    [
+      "C5"
+    ],
+    [
+      "C7"
+    ],
+    [
+      "C8"
+    ]
+  ]
+}

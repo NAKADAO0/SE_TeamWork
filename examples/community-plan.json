@@ -1,0 +1,131 @@
+{
+  "mode": "curated_example",
+  "spec": {
+    "product": "内容社区 MVP",
+    "requirements": [
+      {
+        "id": "R1",
+        "goal": "发布图文笔记",
+        "acceptance": "发布后可读取正文和图片"
+      },
+      {
+        "id": "R2",
+        "goal": "点赞笔记",
+        "acceptance": "重复点赞只计一次"
+      }
+    ],
+    "scope": "支持图文发布、内容流及幂等点赞，复用既有账号体系。"
+  },
+  "capacity": 2,
+  "tasks": [
+    {
+      "id": "N1",
+      "source": "R1",
+      "title": "定义笔记与媒体契约",
+      "role": "backend",
+      "depends_on": [],
+      "output": "笔记数据契约",
+      "acceptance": "正文与图片引用可随笔记一起读取"
+    },
+    {
+      "id": "N2",
+      "source": "R1",
+      "title": "实现媒体检查与笔记发布",
+      "role": "backend",
+      "depends_on": [
+        "N1"
+      ],
+      "output": "发布接口",
+      "acceptance": "无效图片拒绝发布并返回原因"
+    },
+    {
+      "id": "N3",
+      "source": "R1",
+      "title": "开发图文编辑与预览",
+      "role": "frontend",
+      "depends_on": [
+        "N1"
+      ],
+      "output": "发布页面",
+      "acceptance": "预览顺序与提交的图片顺序一致"
+    },
+    {
+      "id": "N4",
+      "source": "R2",
+      "title": "建立点赞唯一约束",
+      "role": "backend",
+      "depends_on": [
+        "N1"
+      ],
+      "output": "点赞接口",
+      "acceptance": "重复请求后同一用户只有一条点赞记录"
+    },
+    {
+      "id": "N5",
+      "source": "R1",
+      "title": "接入发布后的内容流",
+      "role": "frontend",
+      "depends_on": [
+        "N2",
+        "N3"
+      ],
+      "output": "内容流页面",
+      "acceptance": "新笔记在刷新后展示正确正文和图片"
+    },
+    {
+      "id": "N6",
+      "source": "R2",
+      "title": "接入点赞交互并复验",
+      "role": "qa",
+      "depends_on": [
+        "N4",
+        "N5"
+      ],
+      "output": "互动验收记录",
+      "acceptance": "连续点击和刷新后点赞数只增加一次"
+    },
+    {
+      "id": "N7",
+      "source": "R1",
+      "title": "验证图文发布与回读",
+      "role": "qa",
+      "depends_on": [
+        "N5"
+      ],
+      "output": "发布验证报告",
+      "acceptance": "成功笔记可读，无效媒体不产生笔记"
+    },
+    {
+      "id": "N8",
+      "source": "R1、R2",
+      "title": "验收发布到互动全流程",
+      "role": "qa",
+      "depends_on": [
+        "N6",
+        "N7"
+      ],
+      "output": "端到端验收清单",
+      "acceptance": "另一账号可读取笔记并点赞，作者查看计数一致"
+    }
+  ],
+  "batches": [
+    [
+      "N1"
+    ],
+    [
+      "N2",
+      "N3"
+    ],
+    [
+      "N4",
+      "N5"
+    ],
+    [
+      "N6",
+      "N7"
+    ],
+    [
+      "N8"
+    ]
+  ]
+}

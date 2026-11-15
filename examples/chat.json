@@ -1,0 +1,1 @@
+{"product":"聊天 MVP","requirements":[{"id":"R1","goal":"发送文本消息","acceptance":"发送后可查到相同消息 ID"},{"id":"R2","goal":"分页读取会话","acceptance":"翻页无重复消息"}]}
