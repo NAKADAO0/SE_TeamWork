@@ -6,6 +6,11 @@ function reset() { plan=null; $("result").replaceChildren(); $("save").disabled=
 async function load() {
   reset();
   const sample=$("sample").value;
+  if(sample==="custom"){
+    $("spec").value=JSON.stringify({product:"",requirements:[{id:"R1",goal:"",acceptance:""}]},null,2);
+    $("spec").focus();
+    return;
+  }
   try {
     const response=await fetch("./examples/"+sample+".json");
     if(!response.ok) throw Error("无法读取规格");
@@ -20,7 +25,7 @@ $("run").onclick=()=>{
   try {
     const spec=JSON.parse($("spec").value), tasks=decompose(spec);
     const capacity=Number($("capacity").value), batches=compile(tasks,capacity);
-    plan={mode:"offline_rule",spec,capacity,tasks,batches};
+    plan={sample:$("sample").value,mode:"offline_rule",spec,capacity,tasks,batches};
     sessionStorage.setItem("se.plan",JSON.stringify(plan));
     for(const batch of batches){
       const row=document.createElement("li");
@@ -43,6 +48,7 @@ const selected = new URLSearchParams(location.search).get("sample");
 if (["chat", "community"].includes(selected)) $("sample").value = selected;
 const previous=JSON.parse(sessionStorage.getItem("se.plan") || "null");
 if (!selected && previous) {
+  $("sample").value=previous.sample || "custom";
   $("spec").value=JSON.stringify(previous.spec,null,2);
   $("capacity").value=previous.capacity;
   $("run").click();

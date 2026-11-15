@@ -1,5 +1,5 @@
 <!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>规划工作台 · SE Workflow</title><link rel="stylesheet" href="demo/site.css"><body><aside><div class="brand"><b>⌘</b> SE Studio</div><small>项目空间</small><nav><a href="index.html"><i>◈</i>项目概览</a><a aria-current="page" href="workspace.html"><i>▤</i>需求工作台</a><a href="graph.html"><i>⑂</i>工作流图谱</a><a href="examples.html"><i>▦</i>规格样例</a><a href="guide.html"><i>ⓘ</i>使用指南</a></nav><footer>第十二组 · Lab 2</footer></aside><main><h1>开发任务规划工作台</h1><p>离线规则模式 · 编辑规格后生成任务与执行批次</p>
-<label>产品样例 <select id="sample"><option value="chat">聊天 MVP</option><option value="community">内容社区 MVP</option></select></label>
+<label>规格来源 <select id="sample"><option value="custom">其他 · 自定义产品</option><option value="chat">聊天 MVP</option><option value="community">内容社区 MVP</option></select></label>
 <p><label>设计规格 JSON<textarea id="spec"></textarea></label></p>
 <label>并发数 <input id="capacity" type="number" min="1" value="2"></label>
 <button id="run">生成计划</button> <a class="graphlink" href="graph.html">查看工作流图谱 ↗</a> <button id="save" disabled>导出 JSON</button>

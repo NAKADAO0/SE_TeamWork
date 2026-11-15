@@ -1,16 +1,20 @@
-import {decompose} from "./planner.mjs";
-import {compile} from "./compiler.mjs";
 const canvas=document.querySelector("#canvas");
 async function show(){
-  let plan=JSON.parse(sessionStorage.getItem("se.plan") || "null");
-  const preview=!plan;
-  if(preview){
-    const spec=await (await fetch("examples/chat.json")).json();
-    const tasks=decompose(spec);
-    plan={spec,tasks,batches:compile(tasks,2)};
-  }
+  const key=new URLSearchParams(location.search).get("sample");
+  const stored=sessionStorage.getItem("se.plan");
+  const preview=key==="chat" || key==="community" || !stored;
+  const sample=key==="community"?"community":"chat";
+  const plan=preview ? await (await fetch("examples/"+sample+"-plan.json")).json() : JSON.parse(stored);
   const {tasks,batches,spec}=plan;
-  document.querySelector("#summary").textContent=(preview?"样例预览 · ":"当前计划 · ")+spec.product+"　/　"+tasks.length+" 个任务　/　"+batches.length+" 个批次";
+  document.querySelector("#summary").textContent=(preview?"已完成的编排案例 · ":"当前计划 · ")+spec.product+"　/　"+tasks.length+" 个任务　/　"+batches.length+" 个批次";
+  if(preview){
+    const overview=document.createElement("article");
+    const scope=document.createElement("p");scope.textContent=spec.scope;overview.append(scope);
+    for(const r of spec.requirements){
+      const line=document.createElement("p");line.textContent=r.id+" · "+r.goal+" ｜ 验收："+r.acceptance;overview.append(line);
+    }
+    const download=document.createElement("a");download.href="examples/"+sample+"-plan.json";download.download=sample+"-plan.json";download.textContent="下载完整计划 JSON";overview.append(download);canvas.before(overview);
+  }
   const board=document.createElement("div");
   board.id="board";
   board.style.width=(batches.length*244-64)+"px";
@@ -36,7 +40,7 @@ async function show(){
     const title=document.createElement("strong"),meta=document.createElement("small");title.textContent=t.title;meta.textContent=t.id+" · "+t.role;button.append(title,meta);board.append(button);
     button.onclick=()=>{
       board.querySelector('[aria-pressed=true]')?.removeAttribute("aria-pressed");button.setAttribute("aria-pressed","true");
-      document.querySelector("#detail").textContent=t.title+"　|　前置："+(t.depends_on.join("、")||"设计规格")+"　|　验收："+t.acceptance;
+      document.querySelector("#detail").textContent=t.title+"　|　需求："+t.source+"　|　交付："+(t.output||t.title)+"　|　前置："+(t.depends_on.join("、")||"设计规格")+"　|　验收："+t.acceptance;
     };
   }
 }
