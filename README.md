@@ -31,3 +31,14 @@ git switch -c feat/12-pm-plan
 按改动提交并推送个人分支，向 main 发起 PR，关联 Issue，附实际测试结果。至少一名非作者批准，公共字段由受影响成员复核。密钥放在服务端环境变量。课堂交付验收后再建立 v1.0.0-lab2 标签。
 
 组员开工时先看[六人开发认领表](docs/六人开发认领表.md)，按成员编号领取第一项任务。
+
+## 成员 5 计划服务
+
+在仓库根目录的 Python 3.11+ 虚拟环境中运行：
+
+~~~sh
+python -m pip install -r backend/requirements.txt
+python -m uvicorn backend.api:app --host 127.0.0.1 --port 8010
+~~~
+
+成员 1、3、6 可在 /docs 调用 GET /plans/chat-demo?revision=1。响应包含 plan_id、revision 和 plan；plan.tasks 含 8 个节点，plan.batches 为批次。省略 revision 返回最新版本。数据库默认保存在 .local/plans.sqlite3，可用 PLAN_DB 指定路径。运行 python -m unittest discover -s tests -p test_plans.py 执行 API 测试。
