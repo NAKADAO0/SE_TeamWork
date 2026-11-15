@@ -1,0 +1,1 @@
+{"product":"内容社区 MVP","requirements":[{"id":"R1","goal":"发布图文笔记","acceptance":"发布后可读取正文和图片"},{"id":"R2","goal":"点赞笔记","acceptance":"重复点赞只计一次"}]}
