@@ -21,6 +21,7 @@ $("run").onclick=()=>{
     const spec=JSON.parse($("spec").value), tasks=decompose(spec);
     const capacity=Number($("capacity").value), batches=compile(tasks,capacity);
     plan={mode:"offline_rule",spec,capacity,tasks,batches};
+    sessionStorage.setItem("se.plan",JSON.stringify(plan));
     for(const batch of batches){
       const row=document.createElement("li");
       row.textContent="本批可并行"; const list=document.createElement("ul");
@@ -40,4 +41,9 @@ $("save").onclick=()=>{
 };
 const selected = new URLSearchParams(location.search).get("sample");
 if (["chat", "community"].includes(selected)) $("sample").value = selected;
-load();
+const previous=JSON.parse(sessionStorage.getItem("se.plan") || "null");
+if (!selected && previous) {
+  $("spec").value=JSON.stringify(previous.spec,null,2);
+  $("capacity").value=previous.capacity;
+  $("run").click();
+} else load();
