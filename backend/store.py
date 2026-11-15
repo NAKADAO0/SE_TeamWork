@@ -36,3 +36,21 @@ class PlanStore:
         if row is None:
             raise KeyError(plan_id)
         return {"plan_id": plan_id, "revision": row[0], "plan": json.loads(row[1])}
+
+    def append(self, plan_id, expected_revision, draft):
+        with closing(self.connect()) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT revision FROM plans WHERE id = ?", (plan_id,)).fetchone()
+            if row is None:
+                raise KeyError(plan_id)
+            if row[0] != expected_revision:
+                raise RevisionConflict(row[0])
+            revision = expected_revision + 1
+            db.execute("INSERT INTO revisions VALUES (?, ?, ?)",
+                       (plan_id, revision, json.dumps(draft, ensure_ascii=False)))
+            db.execute("UPDATE plans SET revision = ? WHERE id = ?", (revision, plan_id))
+        return {"plan_id": plan_id, "revision": revision, "plan": draft}
+
+
+class RevisionConflict(Exception):
+    pass
