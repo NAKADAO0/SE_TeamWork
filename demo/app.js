@@ -1,5 +1,5 @@
-import {decompose} from "./planner.mjs";
-import {compile} from "./compiler.mjs";
+import {decompose} from "./planner.js";
+import {compile} from "./compiler.js";
 const $ = id => document.getElementById(id);
 let plan;
 function reset() { plan=null; $("result").replaceChildren(); $("save").disabled=true; $("error").textContent=""; }

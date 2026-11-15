@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {decompose} from "../demo/planner.mjs";
-import {compile} from "../demo/compiler.mjs";
+import {decompose} from "../demo/planner.js";
+import {compile} from "../demo/compiler.js";
 for(const product of ["chat","community"]) test(product,()=>{
   const spec=JSON.parse(readFileSync(new URL("../examples/"+product+".json",import.meta.url)));
   const tasks=decompose(spec);
