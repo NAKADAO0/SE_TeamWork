@@ -1,0 +1,8 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lab2 规划工作台</title>
+<style>body{max-width:900px;margin:4vh auto;padding:1rem;font:16px/1.6 system-ui;color:#18344b}textarea{width:98%;height:13rem}button,select,input{padding:.4rem}li{padding:.35rem}output{color:#943020}</style>
+<h1>开发任务规划工作台</h1><p>离线规则模式 · 编辑规格后生成任务与执行批次</p>
+<label>产品样例 <select id="sample"><option value="chat">聊天 MVP</option><option value="community">内容社区 MVP</option></select></label>
+<p><label>设计规格 JSON<textarea id="spec"></textarea></label></p>
+<label>并发数 <input id="capacity" type="number" min="1" value="2"></label>
+<button id="run">生成计划</button> <button id="save" disabled>导出 JSON</button>
+<output id="error" role="alert"></output><ol id="result"></ol><script type="module" src="./demo/app.mjs"></script></html>
