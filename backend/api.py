@@ -13,12 +13,16 @@ class DraftUpdate(BaseModel):
     plan: dict
 
 
-def create_app(path=None):
+from .workflow import initialize, workflow_router
+
+
+def create_app(path=None, planner=None):
     store = PlanStore(path or os.getenv("PLAN_DB") or ROOT / ".local/plans.sqlite3")
 
     @asynccontextmanager
     async def lifespan(app):
         store.initialize()
+        initialize(store)
         yield
 
     app = FastAPI(title="Lab2 计划服务", lifespan=lifespan)
@@ -45,6 +49,7 @@ def create_app(path=None):
         except RevisionConflict as conflict:
             raise HTTPException(409, detail={"current_revision": conflict.args[0]})
 
+    app.include_router(workflow_router(store, planner))
     return app
 
 
