@@ -1,0 +1,366 @@
+{
+  "mode": "curated_example",
+  "status": "compiled",
+  "spec": {
+    "product": "校园活动报名平台 · 复杂示例",
+    "scope": "活动发布、并发报名、支付回调与通知。固定演示数据；全局最多同时执行 2 个任务。",
+    "requirements": [
+      {
+        "id": "R1",
+        "goal": "发布与浏览活动",
+        "acceptance": "发布后可查看正确活动信息"
+      },
+      {
+        "id": "R2",
+        "goal": "报名支付与通知",
+        "acceptance": "报名不超额，支付回调幂等，通知可追溯"
+      },
+      {
+        "id": "R3",
+        "goal": "验证权限、并发与异常恢复",
+        "acceptance": "正常与异常链路有验收记录"
+      }
+    ]
+  },
+  "capacity": 2,
+  "tasks": [
+    {
+      "id": "P01",
+      "title": "定义报名范围与验收口径",
+      "role": "backend",
+      "depends_on": [],
+      "output": "范围说明",
+      "acceptance": "明确名额、取消与支付边界",
+      "source": "R1、R2、R3"
+    },
+    {
+      "id": "P02",
+      "title": "定义活动与订单数据模型",
+      "role": "backend",
+      "depends_on": [
+        "P01"
+      ],
+      "output": "数据模型",
+      "acceptance": "活动、报名与订单关系可追溯",
+      "source": "R1、R2、R3"
+    },
+    {
+      "id": "P03",
+      "title": "定义服务接口与错误码",
+      "role": "backend",
+      "depends_on": [
+        "P01"
+      ],
+      "output": "API 契约",
+      "acceptance": "提交、查询与异常字段一致",
+      "source": "R1、R2、R3"
+    },
+    {
+      "id": "P04",
+      "title": "定义参与者与管理员页面",
+      "role": "frontend",
+      "depends_on": [
+        "P01"
+      ],
+      "output": "页面交互稿",
+      "acceptance": "报名、支付及管理路径完整",
+      "source": "R1、R2、R3"
+    },
+    {
+      "id": "P05",
+      "title": "实现身份与权限服务",
+      "role": "backend",
+      "depends_on": [
+        "P02",
+        "P03"
+      ],
+      "output": "权限服务",
+      "acceptance": "普通用户不能修改他人活动",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P06",
+      "title": "实现活动发布与名额管理",
+      "role": "backend",
+      "depends_on": [
+        "P02",
+        "P03"
+      ],
+      "output": "活动服务",
+      "acceptance": "名额更新遵守库存约束",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P07",
+      "title": "实现报名与防重复提交",
+      "role": "backend",
+      "depends_on": [
+        "P02",
+        "P03"
+      ],
+      "output": "报名服务",
+      "acceptance": "重复请求仅产生一份报名",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P08",
+      "title": "实现订单与支付回调",
+      "role": "backend",
+      "depends_on": [
+        "P02",
+        "P03"
+      ],
+      "output": "订单服务",
+      "acceptance": "重复回调不重复确认订单",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P09",
+      "title": "实现通知与消息队列",
+      "role": "backend",
+      "depends_on": [
+        "P02",
+        "P03"
+      ],
+      "output": "通知服务",
+      "acceptance": "失败消息可重试且不重复发送",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P10",
+      "title": "开发活动管理页面",
+      "role": "frontend",
+      "depends_on": [
+        "P03",
+        "P04"
+      ],
+      "output": "管理页面",
+      "acceptance": "管理员可发布及停止报名",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P11",
+      "title": "开发活动列表与详情",
+      "role": "frontend",
+      "depends_on": [
+        "P03",
+        "P04"
+      ],
+      "output": "活动页面",
+      "acceptance": "显示活动信息与剩余名额",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P12",
+      "title": "开发报名表单与确认页",
+      "role": "frontend",
+      "depends_on": [
+        "P03",
+        "P04"
+      ],
+      "output": "报名页面",
+      "acceptance": "失败保留输入并允许重试",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P13",
+      "title": "开发订单与支付结果页",
+      "role": "frontend",
+      "depends_on": [
+        "P03",
+        "P04"
+      ],
+      "output": "订单页面",
+      "acceptance": "支付状态可刷新查询",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P14",
+      "title": "开发消息中心",
+      "role": "frontend",
+      "depends_on": [
+        "P03",
+        "P04"
+      ],
+      "output": "消息页面",
+      "acceptance": "通知可读且支持分页",
+      "source": "R1、R2"
+    },
+    {
+      "id": "P15",
+      "title": "验证身份与越权访问",
+      "role": "qa",
+      "depends_on": [
+        "P05"
+      ],
+      "output": "权限测试记录",
+      "acceptance": "越权读写请求均被拒绝",
+      "source": "R3"
+    },
+    {
+      "id": "P16",
+      "title": "验证活动发布与展示",
+      "role": "qa",
+      "depends_on": [
+        "P06",
+        "P10",
+        "P11"
+      ],
+      "output": "活动验收记录",
+      "acceptance": "发布后活动信息正确展示",
+      "source": "R3"
+    },
+    {
+      "id": "P17",
+      "title": "验证并发报名与名额",
+      "role": "qa",
+      "depends_on": [
+        "P07",
+        "P12"
+      ],
+      "output": "报名测试记录",
+      "acceptance": "最后一个名额不会被重复占用",
+      "source": "R3"
+    },
+    {
+      "id": "P18",
+      "title": "验证支付幂等与补偿",
+      "role": "qa",
+      "depends_on": [
+        "P08",
+        "P13"
+      ],
+      "output": "支付测试记录",
+      "acceptance": "重复回调及失败补偿符合约定",
+      "source": "R3"
+    },
+    {
+      "id": "P19",
+      "title": "验证通知重试与消息展示",
+      "role": "qa",
+      "depends_on": [
+        "P09",
+        "P14"
+      ],
+      "output": "通知测试记录",
+      "acceptance": "重试不产生重复通知",
+      "source": "R3"
+    },
+    {
+      "id": "P20",
+      "title": "验证跨账号与敏感数据",
+      "role": "qa",
+      "depends_on": [
+        "P05",
+        "P07",
+        "P08"
+      ],
+      "output": "安全测试记录",
+      "acceptance": "账号间报名和订单数据隔离",
+      "source": "R3"
+    },
+    {
+      "id": "P21",
+      "title": "联调发布到报名支付主链",
+      "role": "qa",
+      "depends_on": [
+        "P16",
+        "P17",
+        "P18"
+      ],
+      "output": "主链验收记录",
+      "acceptance": "发布、报名、支付结果一致",
+      "source": "R3"
+    },
+    {
+      "id": "P22",
+      "title": "联调异常恢复与通知链",
+      "role": "qa",
+      "depends_on": [
+        "P15",
+        "P19",
+        "P20"
+      ],
+      "output": "异常验收记录",
+      "acceptance": "鉴权失败、支付失败与重试均可解释",
+      "source": "R3"
+    },
+    {
+      "id": "P23",
+      "title": "执行完整回归与导出核对",
+      "role": "qa",
+      "depends_on": [
+        "P21",
+        "P22"
+      ],
+      "output": "回归报告",
+      "acceptance": "正常与异常用例均有实际结果",
+      "source": "R3"
+    },
+    {
+      "id": "P24",
+      "title": "整理演示材料与交付清单",
+      "role": "qa",
+      "depends_on": [
+        "P23"
+      ],
+      "output": "交付包",
+      "acceptance": "演示步骤可复现且来源版本明确",
+      "source": "R3"
+    }
+  ],
+  "batches": [
+    [
+      "P01"
+    ],
+    [
+      "P02",
+      "P03"
+    ],
+    [
+      "P04",
+      "P05"
+    ],
+    [
+      "P06",
+      "P07"
+    ],
+    [
+      "P08",
+      "P09"
+    ],
+    [
+      "P10",
+      "P11"
+    ],
+    [
+      "P12",
+      "P13"
+    ],
+    [
+      "P14",
+      "P15"
+    ],
+    [
+      "P16",
+      "P17"
+    ],
+    [
+      "P18",
+      "P19"
+    ],
+    [
+      "P20",
+      "P21"
+    ],
+    [
+      "P22"
+    ],
+    [
+      "P23"
+    ],
+    [
+      "P24"
+    ]
+  ]
+}
