@@ -1,0 +1,462 @@
+/* 成员 1 · 规格与任务编辑工作台的布局样式。复用 demo/site.css 的配色与字体。 */
+
+.ws-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ws-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ws-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ws-phase {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.ws-phase[data-phase="plan_confirmed"] {
+  color: #12704f;
+}
+
+.ws-phase[data-phase="plan_compiled"],
+.ws-phase[data-phase="plan_validated"] {
+  color: #2a4dc0;
+}
+
+.ws-phase[data-phase="planning"] {
+  color: #8a6a12;
+}
+
+.ws-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ws-meta {
+  color: #5c6c83;
+  font-size: 13px;
+  margin: 0;
+}
+
+.ws-meta.warn {
+  color: #96650d;
+}
+
+.ws-message {
+  margin: 0;
+  min-height: 22px;
+  font-size: 14px;
+  color: #3c4f66;
+}
+
+.ws-message.error {
+  color: #a32f22;
+}
+
+.ws-message.warn {
+  color: #96650d;
+}
+
+.ws-message.info {
+  color: #1d5b46;
+}
+
+.ws-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(320px, 1fr) minmax(0, 1.45fr);
+  grid-template-areas:
+    "spec table"
+    "detail graph"
+    "batches batches";
+  align-items: start;
+}
+
+.ws-panel {
+  background: #fff;
+  border: 1px solid #d7dfeb;
+  border-top: 3px solid #869cdd;
+  border-radius: 14px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+
+.ws-panel.wide {
+  grid-area: batches;
+}
+
+[data-view="spec"] {
+  grid-area: spec;
+}
+
+[data-view="table"] {
+  grid-area: table;
+}
+
+[data-view="detail"] {
+  grid-area: detail;
+}
+
+[data-view="graph"] {
+  grid-area: graph;
+}
+
+.ws-panel h2 {
+  font-size: 17px;
+  margin: 0 0 10px;
+}
+
+.ws-panel h3 {
+  font-size: 14px;
+  margin: 16px 0 6px;
+  color: #34496a;
+}
+
+.ws-panel label {
+  display: block;
+  font-size: 13px;
+  color: #40556f;
+  margin-bottom: 8px;
+}
+
+.ws-panel label.grow {
+  flex: 1;
+}
+
+.ws-panel input,
+.ws-panel select,
+.ws-panel textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: #233852;
+  background: #fbfcff;
+  border: 1px solid #c3cfe3;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.ws-panel textarea {
+  font: 13px/1.6 "Cascadia Mono", Consolas, monospace;
+  resize: vertical;
+}
+
+[data-view="spec"] textarea[data-role="text"] {
+  min-height: 220px;
+}
+
+.ws-panel textarea[readonly] {
+  background: #f1f3f8;
+  color: #5a6b80;
+}
+
+.ws-panel button {
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.ws-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.ws-row > label {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+
+.ws-row > label.grow {
+  flex: 1 1 140px;
+}
+
+.ws-issues {
+  margin: 6px 0;
+}
+
+.issue {
+  margin: 6px 0;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border-left: 3px solid #c9d2e0;
+  background: #f7f9fc;
+}
+
+.issue.error {
+  border-left-color: #c0392b;
+  background: #fdf2f0;
+}
+
+.issue.warning {
+  border-left-color: #c98b16;
+  background: #fdf8ec;
+}
+
+.issue code {
+  margin-right: 6px;
+  color: #45536b;
+}
+
+.issue .path {
+  color: #6b7c92;
+  margin-right: 6px;
+  font-family: Consolas, monospace;
+}
+
+.ok {
+  color: #12704f;
+  font-size: 13px;
+}
+
+.ws-table-wrap {
+  max-height: 340px;
+  overflow: auto;
+}
+
+.ws-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ws-table th {
+  text-align: left;
+  font-weight: 600;
+  color: #52657f;
+  border-bottom: 1px solid #dde4ee;
+  padding: 6px 8px;
+  position: sticky;
+  top: 0;
+  background: #fff;
+}
+
+.ws-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.ws-table tbody tr {
+  cursor: pointer;
+}
+
+.ws-table tbody tr:hover {
+  background: #f4f7fd;
+}
+
+.ws-table tbody tr[aria-selected="true"] {
+  background: #e8eefc;
+  box-shadow: inset 3px 0 0 #4a63c8;
+}
+
+.ws-table .empty {
+  color: #7b8a9e;
+  text-align: center;
+  padding: 18px;
+}
+
+.role {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #eef1f7;
+  color: #3c4f66;
+}
+
+.role.backend {
+  background: #e7ecfb;
+  color: #2c47a4;
+}
+
+.role.frontend {
+  background: #e6f6ef;
+  color: #14614a;
+}
+
+.role.qa {
+  background: #fdf0e4;
+  color: #8a4d10;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.badge.error {
+  background: #fbe5e2;
+  color: #a32f22;
+}
+
+.badge.warn {
+  background: #fbf1d8;
+  color: #8a6413;
+}
+
+.badge.ok {
+  background: #e6f4ec;
+  color: #1a6b4f;
+}
+
+.ws-deps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+}
+
+.ws-deps li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px dashed #e4e9f2;
+  font-size: 13px;
+}
+
+.ws-deps button {
+  margin-left: auto;
+  padding: 2px 8px;
+}
+
+button.danger {
+  background: #b93b2c;
+}
+
+button.active {
+  background: #1d6f52;
+}
+
+.ws-graph {
+  position: relative;
+  border: 1px solid #d8e0ec;
+  border-radius: 12px;
+  background-color: #fbfcff;
+  background-image: radial-gradient(#d5ddec 1px, transparent 1px);
+  background-size: 16px 16px;
+  height: 320px;
+  overflow: auto;
+}
+
+.ws-graph svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ws-edge {
+  fill: none;
+  stroke: #7489ad;
+  stroke-width: 1.4;
+}
+
+.ws-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #aebee0;
+  border-left: 4px solid #526ce0;
+  color: #213652;
+  box-shadow: 0 3px 12px #253b5c14;
+  padding: 6px 10px;
+  overflow: hidden;
+}
+
+.ws-node.qa {
+  border-left-color: #168a80;
+}
+
+.ws-node.frontend {
+  border-left-color: #2f8a5a;
+}
+
+.ws-node b,
+.ws-node small {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ws-node small {
+  color: #5c6c83;
+  font-weight: 400;
+}
+
+.ws-node.selected {
+  outline: 2px solid #4a63c8;
+}
+
+.ws-node.source {
+  outline: 2px dashed #c07a12;
+}
+
+.ws-batch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px dashed #e4e9f2;
+  font-size: 13px;
+}
+
+.chip {
+  font-size: 12px !important;
+  padding: 2px 10px !important;
+  border-radius: 999px !important;
+  background: #eef1f7 !important;
+  color: #2f4460 !important;
+}
+
+.chip.confirmed {
+  background: #e2f3ea !important;
+  color: #14614a !important;
+}
+
+.waiting {
+  font-size: 12px;
+  color: #8a6413;
+}
+
+.ws-versions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-bottom: 24px;
+}
+
+@media (max-width: 1080px) {
+  .ws-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "spec"
+      "table"
+      "detail"
+      "graph"
+      "batches";
+  }
+}
