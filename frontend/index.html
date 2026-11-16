@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>规划工作台 v2 · SE Workflow</title>
+<link rel="stylesheet" href="../demo/site.css">
+<link rel="stylesheet" href="src/workspace.css">
+<body>
+<aside>
+  <div class="brand"><b>⌘</b> SE Studio</div>
+  <small>项目空间</small>
+  <nav>
+    <a href="../index.html"><i>◈</i>项目概览</a>
+    <a aria-current="page" href="index.html"><i>▤</i>需求工作台</a>
+    <a href="../graph.html"><i>⑂</i>工作流图谱</a>
+    <a href="../examples.html"><i>▦</i>规格样例</a>
+    <a href="../guide.html"><i>ⓘ</i>使用指南</a>
+  </nav>
+  <footer>第十二组 · Lab 2</footer>
+</aside>
+<main class="ws-main">
+  <header class="ws-bar">
+    <div class="ws-status">
+      <span class="ws-phase" data-role="phase">规格草稿</span>
+      <span class="ws-meta" data-role="refs"></span>
+    </div>
+    <div class="ws-actions">
+      <button type="button" data-action="validate">校验</button>
+      <button type="button" data-action="compile">编排</button>
+      <button type="button" data-action="confirm">确认版本</button>
+      <button type="button" data-action="export">导出 JSON</button>
+    </div>
+  </header>
+
+  <p class="ws-message" data-role="message" role="status" aria-live="polite"></p>
+
+  <div class="ws-grid">
+    <section class="ws-panel" data-view="spec"></section>
+    <section class="ws-panel" data-view="table"></section>
+    <section class="ws-panel" data-view="detail"></section>
+    <section class="ws-panel" data-view="graph"></section>
+    <section class="ws-panel wide" data-view="batches"></section>
+  </div>
+
+  <footer class="ws-versions" data-role="versions"></footer>
+</main>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+{
+  "schema_version": "0.1-draft",
+  "plan_id": "PLAN-CHAT",
+  "revision": 1,
+  "spec_ref": { "spec_id": "SPEC-CHAT", "version": 1 },
+  "template_ref": { "template_id": "default", "version": "1.0" },
+  "generation_mode": "offline_rule",
+  "config": { "max_concurrency": 2, "role_capacity": { "backend": 1, "frontend": 1, "qa": 1 } },
+  "assumptions": ["沿用现有登录会话，不新建账号体系"],
+  "open_questions": [],
+  "tasks": [
+    {
+      "id": "C1",
+      "title": "定义消息与会话契约",
+      "description": "固定发送与查询接口的字段、错误码和分页参数。",
+      "kind": "support",
+      "stage": "design",
+      "role": "backend",
+      "requirement_ids": ["R-MSG-01"],
+      "module_ids": ["M-MSG"],
+      "design_refs": ["I-SEND", "I-ERR"],
+      "inputs": [{ "source": "design", "ref": "I-SEND", "type": "design_contract" }],
+      "outputs": [{ "id": "O-CONTRACT", "type": "design_contract", "description": "消息与会话接口契约" }],
+      "acceptance": ["接口签名、错误码与分页参数写入契约文档"],
+      "depends_on": [],
+      "priority": 1,
+      "estimated_effort": { "value": 0.5, "unit": "day", "basis": "文档整理" }
+    },
+    {
+      "id": "C2",
+      "title": "实现消息写入与鉴权",
+      "description": "实现发送接口，校验会话成员身份后写入消息。",
+      "kind": "implementation",
+      "stage": "implement",
+      "role": "backend",
+      "requirement_ids": ["R-MSG-01"],
+      "module_ids": ["M-MSG"],
+      "design_refs": ["I-SEND"],
+      "inputs": [{ "source": "task_output", "ref": "C1/O-CONTRACT", "type": "design_contract" }],
+      "outputs": [{ "id": "O-API", "type": "implementation", "description": "消息写入接口" }],
+      "acceptance": ["非会话成员写入返回 403", "成功响应返回可回查的消息 ID"],
+      "depends_on": [{ "task_id": "C1", "reason": "需要已固定的接口契约" }],
+      "priority": 1,
+      "estimated_effort": { "value": 1.5, "unit": "day", "basis": "接口与鉴权" }
+    },
+    {
+      "id": "C3",
+      "title": "开发聊天输入与发送状态",
+      "description": "实现输入框、发送按钮、发送中与失败重试状态。",
+      "kind": "implementation",
+      "stage": "implement",
+      "role": "frontend",
+      "requirement_ids": ["R-MSG-01"],
+      "module_ids": ["M-WEB"],
+      "design_refs": ["I-SEND"],
+      "inputs": [{ "source": "task_output", "ref": "C1/O-CONTRACT", "type": "design_contract" }],
+      "outputs": [{ "id": "O-UI", "type": "implementation", "description": "发送界面" }],
+      "acceptance": ["发送失败可重试且保留已输入内容"],
+      "depends_on": [{ "task_id": "C1", "reason": "按契约字段对接接口" }],
+      "priority": 1,
+      "estimated_effort": { "value": 1.5, "unit": "day", "basis": "交互与状态" }
+    },
+    {
+      "id": "C4",
+      "title": "实现游标历史查询",
+      "description": "按游标分页读取会话消息，末页返回空列表。",
+      "kind": "implementation",
+      "stage": "implement",
+      "role": "backend",
+      "requirement_ids": ["R-MSG-02"],
+      "module_ids": ["M-MSG"],
+      "design_refs": ["I-LIST"],
+      "inputs": [
+        { "source": "design", "ref": "I-LIST", "type": "design_contract" },
+        { "source": "task_output", "ref": "C2/O-API", "type": "implementation" }
+      ],
+      "outputs": [{ "id": "O-PAGE", "type": "implementation", "description": "分页接口" }],
+      "acceptance": ["连续两页不出现重复消息"],
+      "depends_on": [{ "task_id": "C2", "reason": "复用消息存储与鉴权" }],
+      "priority": 1,
+      "estimated_effort": { "value": 1, "unit": "day", "basis": "分页逻辑" }
+    },
+    {
+      "id": "C5",
+      "title": "接入历史列表与加载更多",
+      "description": "渲染历史消息，触底加载并把滚动位置固定在当前消息。",
+      "kind": "implementation",
+      "stage": "implement",
+      "role": "frontend",
+      "requirement_ids": ["R-MSG-02"],
+      "module_ids": ["M-WEB"],
+      "design_refs": ["I-LIST"],
+      "inputs": [
+        { "source": "task_output", "ref": "C3/O-UI", "type": "implementation" },
+        { "source": "task_output", "ref": "C4/O-PAGE", "type": "implementation" }
+      ],
+      "outputs": [{ "id": "O-LIST", "type": "implementation", "description": "历史列表" }],
+      "acceptance": ["加载旧消息后仍停留在当前阅读位置"],
+      "depends_on": [
+        { "task_id": "C3", "reason": "复用消息列表容器" },
+        { "task_id": "C4", "reason": "需要分页接口返回游标" }
+      ],
+      "priority": 1,
+      "estimated_effort": { "value": 1, "unit": "day", "basis": "列表交互" }
+    },
+    {
+      "id": "C6",
+      "title": "验证发送与会话隔离",
+      "description": "验证发送成功、ID 一致与非会话成员被拒绝。",
+      "kind": "verification",
+      "stage": "verify",
+      "role": "qa",
+      "requirement_ids": ["R-MSG-01"],
+      "module_ids": ["M-MSG", "M-WEB"],
+      "design_refs": ["I-SEND", "I-ERR"],
+      "inputs": [
+        { "source": "design", "ref": "I-SEND", "type": "design_contract" },
+        { "source": "task_output", "ref": "C2/O-API", "type": "implementation" },
+        { "source": "task_output", "ref": "C3/O-UI", "type": "implementation" }
+      ],
+      "outputs": [{ "id": "O-VERIFY-MSG", "type": "verification_report", "description": "消息验证报告" }],
+      "acceptance": ["本会话可查回已发送 ID，其他会话不可见"],
+      "depends_on": [
+        { "task_id": "C2", "reason": "需要可调用的写入接口" },
+        { "task_id": "C3", "reason": "需要可操作的发送界面" }
+      ],
+      "priority": 1,
+      "estimated_effort": { "value": 0.5, "unit": "day", "basis": "按验收条件执行" }
+    },
+    {
+      "id": "C7",
+      "title": "验证分页边界",
+      "description": "覆盖空会话、末页与连续翻页。",
+      "kind": "verification",
+      "stage": "verify",
+      "role": "qa",
+      "requirement_ids": ["R-MSG-02"],
+      "module_ids": ["M-MSG", "M-WEB"],
+      "design_refs": ["I-LIST"],
+      "inputs": [
+        { "source": "task_output", "ref": "C4/O-PAGE", "type": "implementation" },
+        { "source": "task_output", "ref": "C5/O-LIST", "type": "implementation" }
+      ],
+      "outputs": [{ "id": "O-VERIFY-PAGE", "type": "verification_report", "description": "分页验证报告" }],
+      "acceptance": ["空会话、末页与连续翻页均符合契约"],
+      "depends_on": [
+        { "task_id": "C4", "reason": "需要分页接口" },
+        { "task_id": "C5", "reason": "需要历史列表实现" }
+      ],
+      "priority": 1,
+      "estimated_effort": { "value": 0.5, "unit": "day", "basis": "边界用例" }
+    },
+    {
+      "id": "C8",
+      "title": "联调发送到历史回读",
+      "description": "串起发送、刷新、翻页的端到端路径。",
+      "kind": "integration",
+      "stage": "integrate",
+      "role": "qa",
+      "requirement_ids": ["R-MSG-01", "R-MSG-02"],
+      "module_ids": ["M-MSG", "M-WEB"],
+      "design_refs": ["I-SEND", "I-LIST"],
+      "inputs": [
+        { "source": "task_output", "ref": "C6/O-VERIFY-MSG", "type": "verification_report" },
+        { "source": "task_output", "ref": "C7/O-VERIFY-PAGE", "type": "verification_report" }
+      ],
+      "outputs": [{ "id": "O-E2E", "type": "integration_report", "description": "端到端验收清单" }],
+      "acceptance": ["发送后刷新与翻页仍能按 ID 定位同一条消息"],
+      "depends_on": [
+        { "task_id": "C6", "reason": "依赖发送验证结论" },
+        { "task_id": "C7", "reason": "依赖分页验证结论" }
+      ],
+      "priority": 1,
+      "estimated_effort": { "value": 0.5, "unit": "day", "basis": "端到端复核" }
+    }
+  ]
+}

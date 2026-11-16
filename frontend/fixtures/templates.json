@@ -1,0 +1,24 @@
+[
+  {
+    "template_id": "default",
+    "version": "1.0",
+    "name": "标准交付模板",
+    "stages": ["design", "implement", "verify", "integrate"],
+    "allowed_roles": ["backend", "frontend", "qa"],
+    "require_verification": true,
+    "max_concurrency": 2,
+    "role_capacity": { "backend": 1, "frontend": 1, "qa": 1 },
+    "ordering": ["priority", "task_id"]
+  },
+  {
+    "template_id": "fast",
+    "version": "1.0",
+    "name": "高并行模板",
+    "stages": ["implement", "verify", "integrate"],
+    "allowed_roles": ["backend", "frontend", "qa"],
+    "require_verification": true,
+    "max_concurrency": 3,
+    "role_capacity": { "backend": 1, "frontend": 1, "qa": 2 },
+    "ordering": ["priority", "task_id"]
+  }
+]

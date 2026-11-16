@@ -1,1 +1,8 @@
-{"name":"se-teamwork-demo","private":true,"type":"module"}
+{
+  "name": "se-teamwork-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests frontend/tests"
+  }
+}
