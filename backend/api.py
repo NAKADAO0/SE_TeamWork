@@ -13,10 +13,11 @@ class DraftUpdate(BaseModel):
     plan: dict
 
 
+from .delivery import delivery_router
 from .workflow import initialize, workflow_router
 
 
-def create_app(path=None, planner=None):
+def create_app(path=None, planner=None, validator=None, compiler=None):
     store = PlanStore(path or os.getenv("PLAN_DB") or ROOT / ".local/plans.sqlite3")
 
     @asynccontextmanager
@@ -50,6 +51,7 @@ def create_app(path=None, planner=None):
             raise HTTPException(409, detail={"current_revision": conflict.args[0]})
 
     app.include_router(workflow_router(store, planner))
+    app.include_router(delivery_router(store, validator, compiler))
     return app
 
 
