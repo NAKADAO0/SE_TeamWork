@@ -44,3 +44,15 @@ python -m uvicorn backend.api:app --host 127.0.0.1 --port 8010
 成员 1、3、6 可在 /docs 调用 GET /plans/chat-demo?revision=1。响应包含 plan_id、revision 和 plan；plan.tasks 含 8 个节点，plan.batches 为批次。省略 revision 返回最新版本。数据库默认保存在 .local/plans.sqlite3，可用 PLAN_DB 指定路径。运行 python -m unittest discover -s tests -p test_plans.py 执行 API 测试。
 
 修改计划时先 GET，再用 PUT /plans/chat-demo 提交 {"expected_revision":1,"plan":完整编辑后的计划对象}。成功返回新 revision 和草稿；原修订仍可查询，草稿需重新编排。若返回 409，读取 detail.current_revision，重新载入当前内容，核对差异后再保存。
+
+### 成员 5 联调路径
+
+运行环境需要 Python 和 Node 22（node 在 PATH 中）。服务启动命令同上，在 http://127.0.0.1:8010/docs 可依次调用：
+
+1. POST /specs 提交 examples/chat.json 形状的 JSON，记录 spec_id。POST /specs/{id}/confirm 提交 {"expected_version":1}。
+2. POST /planning-jobs 提交 {"spec_ref":{"spec_id":"替换为实际编号","version":1},"mode":"offline_rule","config":{"max_concurrency":2}}。用 GET /planning-jobs/{job_id} 轮询，成功后读取 plan_ref。
+3. 向 /plans/{id}/validate 和 /plans/{id}/compile 依次 POST {"revision":1}，保存 execution_plan_id。检查报告及节点、边、批次。
+4. POST /plans/{id}/confirm 提交 revision 和 execution_plan_id。通过 GET /plans/{id}/export?revision=1&format=json 下载固定版本，format=markdown 输出可读清单和完整快照。
+5. PUT 保存下一版后需重新校验、编排和确认。旧版仍能导出。运行 python -m unittest discover -s tests 验证完整链路。
+
+本地演示使用单个 Uvicorn worker。作业状态持久化，服务重启将未结束作业标记失败，可重新提交。成员 2 可向 create_app 注入 planner(spec) 返回任务列表；成员 3 注入 validator(plan) 返回错误列表；成员 4 注入 compiler(plan) 返回批次列表。默认使用 Demo 的 Node 规则服务和基础字段检查。实时模式未配置时返回 503。前端成员通过这些端点替换 sessionStorage 调用。
