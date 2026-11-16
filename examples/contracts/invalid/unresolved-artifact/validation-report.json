@@ -1,0 +1,57 @@
+{
+  "blocked": true,
+  "content_digest": "0c5c11e2cd1a7594c17dc6ae8ed74876f9ad74db3e5be00c777a4a9c30f68d19",
+  "coverage": {
+    "implementation_ratio": 1.0,
+    "requirements": [
+      {
+        "implementation_task_ids": [
+          "C1",
+          "C2",
+          "C3"
+        ],
+        "requirement_id": "R1",
+        "status": "covered",
+        "verification_task_ids": [
+          "C6"
+        ]
+      },
+      {
+        "implementation_task_ids": [
+          "C4",
+          "C5"
+        ],
+        "requirement_id": "R2",
+        "status": "covered",
+        "verification_task_ids": [
+          "C7"
+        ]
+      }
+    ],
+    "verification_ratio": 1.0
+  },
+  "issues": [
+    {
+      "code": "ARTIFACT_OUTPUT_UNKNOWN",
+      "field_path": "tasks[5].inputs[1].ref",
+      "message": "任务 C6 的输入引用了 C2/O-API，但任务 C2 未声明产物 O-API",
+      "object_id": "C6",
+      "related_ids": [
+        "C2",
+        "O-API"
+      ],
+      "severity": "error",
+      "suggested_action": "核对任务 C2 的 outputs，或修正 inputs.ref；编译/确认前必须解决"
+    }
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  },
+  "target": {
+    "kind": "task_plan",
+    "plan_id": "PLAN-CHAT",
+    "revision": 1
+  }
+}

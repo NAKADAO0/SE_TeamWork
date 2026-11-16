@@ -1,0 +1,226 @@
+{
+  "$defs": {
+    "Binding": {
+      "additionalProperties": false,
+      "properties": {
+        "global_slot": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "role_slot": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "task_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "global_slot",
+        "role_slot"
+      ],
+      "title": "Binding",
+      "type": "object"
+    },
+    "Edge": {
+      "additionalProperties": false,
+      "properties": {
+        "from_task": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "to_task": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_task",
+        "to_task"
+      ],
+      "title": "Edge",
+      "type": "object"
+    },
+    "ExecutionNode": {
+      "additionalProperties": false,
+      "properties": {
+        "priority": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "stage": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "task_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "role",
+        "stage",
+        "priority"
+      ],
+      "title": "ExecutionNode",
+      "type": "object"
+    },
+    "ExecutionPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "batches": {
+          "items": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "bindings": {
+          "items": {
+            "$ref": "#/$defs/Binding"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "config_digest": {
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/Edge"
+          },
+          "type": "array"
+        },
+        "execution_plan_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/ExecutionNode"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "plan_ref": {
+          "$ref": "#/$defs/PlanRef"
+        },
+        "schema_version": {
+          "enum": [
+            "1.0"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "spec_digest": {
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "template_digest": {
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "topological_levels": {
+          "items": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "validation_ref": {
+          "$ref": "#/$defs/ValidationRef"
+        }
+      },
+      "required": [
+        "schema_version",
+        "execution_plan_id",
+        "plan_ref",
+        "spec_digest",
+        "template_digest",
+        "config_digest",
+        "nodes",
+        "edges",
+        "topological_levels",
+        "batches",
+        "bindings",
+        "validation_ref"
+      ],
+      "title": "ExecutionPlan",
+      "type": "object"
+    },
+    "PlanRef": {
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "plan_id",
+        "revision"
+      ],
+      "title": "PlanRef",
+      "type": "object"
+    },
+    "ValidationRef": {
+      "additionalProperties": false,
+      "properties": {
+        "plan_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "report_digest": {
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "plan_id",
+        "revision",
+        "report_digest"
+      ],
+      "title": "ValidationRef",
+      "type": "object"
+    }
+  },
+  "$id": "execution_plan.schema.json",
+  "$ref": "#/$defs/ExecutionPlan",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExecutionPlan"
+}

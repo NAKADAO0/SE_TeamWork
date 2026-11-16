@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "template_id": "TPL-DEFAULT",
+  "version": 1,
+  "name": "默认实现-验证-集成模板",
+  "description": "按实现、验证、集成三个阶段组织任务；每条范围内的需求都要求有实现任务与验证任务，容量按角色配置。",
+  "stages": [
+    "implement",
+    "verify",
+    "integrate"
+  ],
+  "allowed_roles": [
+    "backend",
+    "frontend",
+    "qa"
+  ],
+  "require_verification": true
+}

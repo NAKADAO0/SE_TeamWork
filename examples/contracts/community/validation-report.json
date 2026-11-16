@@ -1,0 +1,44 @@
+{
+  "blocked": false,
+  "content_digest": "dd73e0338d622bab28d9acd7b72d3de888e89e97f82976ca1a26844248504164",
+  "coverage": {
+    "implementation_ratio": 1.0,
+    "requirements": [
+      {
+        "implementation_task_ids": [
+          "N1",
+          "N2",
+          "N3",
+          "N5"
+        ],
+        "requirement_id": "R1",
+        "status": "covered",
+        "verification_task_ids": [
+          "N7"
+        ]
+      },
+      {
+        "implementation_task_ids": [
+          "N4"
+        ],
+        "requirement_id": "R2",
+        "status": "covered",
+        "verification_task_ids": [
+          "N6"
+        ]
+      }
+    ],
+    "verification_ratio": 1.0
+  },
+  "issues": [],
+  "schema_version": "1.0",
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "target": {
+    "kind": "task_plan",
+    "plan_id": "PLAN-COMMUNITY",
+    "revision": 1
+  }
+}

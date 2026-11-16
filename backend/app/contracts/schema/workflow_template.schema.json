@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "WorkflowTemplate": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_roles": {
+          "description": "允许的角色",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "require_verification": {
+          "description": "是否要求每条需求都有验证任务",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "enum": [
+            "1.0"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "stages": {
+          "description": "允许的任务阶段",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "template_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "template_id",
+        "version",
+        "name",
+        "description",
+        "stages",
+        "allowed_roles",
+        "require_verification"
+      ],
+      "title": "WorkflowTemplate",
+      "type": "object"
+    }
+  },
+  "$id": "workflow_template.schema.json",
+  "$ref": "#/$defs/WorkflowTemplate",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkflowTemplate"
+}

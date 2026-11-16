@@ -1,0 +1,239 @@
+{
+  "$defs": {
+    "Coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "implementation_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "requirements": {
+          "items": {
+            "$ref": "#/$defs/RequirementCoverage"
+          },
+          "type": "array"
+        },
+        "verification_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "requirements",
+        "implementation_ratio",
+        "verification_ratio"
+      ],
+      "title": "Coverage",
+      "type": "object"
+    },
+    "ReportTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "execution_plan_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "design_spec",
+            "task_plan",
+            "execution_plan"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "plan_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "spec_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "ReportTarget",
+      "type": "object"
+    },
+    "RequirementCoverage": {
+      "additionalProperties": false,
+      "properties": {
+        "implementation_task_ids": {
+          "items": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requirement_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "covered",
+            "missing_implementation",
+            "missing_verification",
+            "missing_both"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "verification_task_ids": {
+          "items": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "implementation_task_ids",
+        "verification_task_ids",
+        "status"
+      ],
+      "title": "RequirementCoverage",
+      "type": "object"
+    },
+    "Summary": {
+      "additionalProperties": false,
+      "properties": {
+        "errors": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warnings": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "errors",
+        "warnings"
+      ],
+      "title": "Summary",
+      "type": "object"
+    },
+    "ValidationIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "type": "string"
+        },
+        "field_path": {
+          "description": "JSON 路径，如 tasks[0].depends_on[1].task_id",
+          "minLength": 1,
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "object_id": {
+          "description": "问题所在对象 ID",
+          "minLength": 1,
+          "type": "string"
+        },
+        "related_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "suggested_action": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "severity",
+        "object_id",
+        "field_path",
+        "message"
+      ],
+      "title": "ValidationIssue",
+      "type": "object"
+    },
+    "ValidationReport": {
+      "additionalProperties": false,
+      "properties": {
+        "blocked": {
+          "description": "是否存在 error 级问题",
+          "type": "boolean"
+        },
+        "content_digest": {
+          "description": "被校验对象（规格或计划）的内容摘要",
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/ValidationIssue"
+          },
+          "type": "array"
+        },
+        "schema_version": {
+          "enum": [
+            "1.0"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "summary": {
+          "$ref": "#/$defs/Summary"
+        },
+        "target": {
+          "$ref": "#/$defs/ReportTarget"
+        }
+      },
+      "required": [
+        "schema_version",
+        "target",
+        "content_digest",
+        "blocked",
+        "summary",
+        "issues"
+      ],
+      "title": "ValidationReport",
+      "type": "object"
+    }
+  },
+  "$id": "validation_report.schema.json",
+  "$ref": "#/$defs/ValidationReport",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ValidationReport"
+}
