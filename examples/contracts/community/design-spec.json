@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0",
+  "spec_id": "SPEC-COMMUNITY",
+  "version": 1,
+  "product": "内容社区 MVP",
+  "scope": {
+    "goal": "支持图文发布、内容流及幂等点赞，复用既有账号体系。",
+    "included": [
+      "图文笔记发布与回读",
+      "发布内容流展示",
+      "幂等点赞"
+    ],
+    "excluded": [
+      "直播",
+      "推荐算法训练",
+      "私信",
+      "评论"
+    ]
+  },
+  "requirements": [
+    {
+      "id": "R1",
+      "goal": "发布图文笔记",
+      "acceptance": "发布后可读取正文和图片"
+    },
+    {
+      "id": "R2",
+      "goal": "点赞笔记",
+      "acceptance": "重复点赞只计一次"
+    }
+  ],
+  "modules": [
+    {
+      "id": "M-NOTE",
+      "responsibility": "笔记正文、媒体引用与发布校验",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "M-FEED",
+      "responsibility": "内容流查询与排序",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "M-LIKE",
+      "responsibility": "点赞计数与幂等唯一约束",
+      "requirement_ids": [
+        "R2"
+      ]
+    },
+    {
+      "id": "M-COMMUNITY-UI",
+      "responsibility": "图文编辑、内容流与点赞交互界面",
+      "requirement_ids": [
+        "R1",
+        "R2"
+      ]
+    }
+  ],
+  "design_items": [
+    {
+      "id": "I-NOTE-API",
+      "kind": "interface",
+      "description": "POST 笔记接口，返回可读取的笔记 ID",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "I-FEED-API",
+      "kind": "interface",
+      "description": "GET 内容流接口，按发布时间倒序分页",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "I-LIKE-API",
+      "kind": "interface",
+      "description": "POST 点赞接口，同一用户对同一笔记幂等",
+      "requirement_ids": [
+        "R2"
+      ]
+    },
+    {
+      "id": "I-NOTE-ENTITY",
+      "kind": "entity",
+      "description": "笔记实体：笔记 ID、作者、正文、图片引用列表、发布时间",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "I-MEDIA-RULE",
+      "kind": "rule",
+      "description": "图片类型与数量校验规则，校验失败拒绝发布",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "I-LIKE-RULE",
+      "kind": "rule",
+      "description": "同一用户对同一笔记的点赞唯一约束",
+      "requirement_ids": [
+        "R2"
+      ]
+    },
+    {
+      "id": "P-COMMUNITY-PAGE",
+      "kind": "page",
+      "description": "社区页：图文编辑、预览、内容流与点赞按钮",
+      "requirement_ids": [
+        "R1",
+        "R2"
+      ]
+    }
+  ],
+  "constraints": [
+    {
+      "id": "C-STACK",
+      "category": "stack",
+      "detail": "复用既有账号体系与 HTTP JSON 接口",
+      "status": "specified"
+    },
+    {
+      "id": "C-PLATFORM",
+      "category": "platform",
+      "detail": "Web 单页工作台演示",
+      "status": "specified"
+    },
+    {
+      "id": "C-SECURITY",
+      "category": "security",
+      "detail": "仅登录账号可发布与点赞，作者与点赞人身份由会话决定",
+      "status": "specified"
+    },
+    {
+      "id": "C-INFRA",
+      "category": "infrastructure",
+      "detail": "本地 SQLite 存储，演示环境不引入外部对象存储",
+      "status": "not_applicable"
+    }
+  ]
+}

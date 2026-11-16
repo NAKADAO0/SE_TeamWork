@@ -1,0 +1,44 @@
+{
+  "blocked": false,
+  "content_digest": "8afef1b6a2f72761ad0c2a4f49649da0f2195f94d4e13ab017991d6028b4aa22",
+  "coverage": {
+    "implementation_ratio": 1.0,
+    "requirements": [
+      {
+        "implementation_task_ids": [
+          "C1",
+          "C2",
+          "C3"
+        ],
+        "requirement_id": "R1",
+        "status": "covered",
+        "verification_task_ids": [
+          "C6"
+        ]
+      },
+      {
+        "implementation_task_ids": [
+          "C4",
+          "C5"
+        ],
+        "requirement_id": "R2",
+        "status": "covered",
+        "verification_task_ids": [
+          "C7"
+        ]
+      }
+    ],
+    "verification_ratio": 1.0
+  },
+  "issues": [],
+  "schema_version": "1.0",
+  "summary": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "target": {
+    "kind": "task_plan",
+    "plan_id": "PLAN-CHAT",
+    "revision": 1
+  }
+}

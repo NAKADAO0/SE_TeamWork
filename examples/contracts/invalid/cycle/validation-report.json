@@ -1,0 +1,58 @@
+{
+  "blocked": true,
+  "content_digest": "39d44c7f29c5c46843636d6d678a9d7f111337fdf0be0af7c3765b5d2e0bfefd",
+  "coverage": {
+    "implementation_ratio": 1.0,
+    "requirements": [
+      {
+        "implementation_task_ids": [
+          "C1",
+          "C2",
+          "C3"
+        ],
+        "requirement_id": "R1",
+        "status": "covered",
+        "verification_task_ids": [
+          "C6"
+        ]
+      },
+      {
+        "implementation_task_ids": [
+          "C4",
+          "C5"
+        ],
+        "requirement_id": "R2",
+        "status": "covered",
+        "verification_task_ids": [
+          "C7"
+        ]
+      }
+    ],
+    "verification_ratio": 1.0
+  },
+  "issues": [
+    {
+      "code": "DEPENDENCY_CYCLE",
+      "field_path": "tasks[6].depends_on[1].task_id",
+      "message": "任务依赖存在闭合环：C5 → C7 → C5（箭头表示依赖方向：A → B 表示 A 依赖 B；边方向为前置 → 当前任务）",
+      "object_id": "C5",
+      "related_ids": [
+        "C5",
+        "C7",
+        "C5"
+      ],
+      "severity": "error",
+      "suggested_action": "删除环中的一条依赖边后重新校验；受环影响的下游任务暂不编排，校验器不会自动删边"
+    }
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "errors": 1,
+    "warnings": 0
+  },
+  "target": {
+    "kind": "task_plan",
+    "plan_id": "PLAN-CHAT",
+    "revision": 1
+  }
+}

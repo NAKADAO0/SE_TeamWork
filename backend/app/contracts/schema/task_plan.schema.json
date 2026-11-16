@@ -1,0 +1,422 @@
+{
+  "$defs": {
+    "Clarification": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "question": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "related_ids": {
+          "description": "关联的需求/模块/设计条目",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "question",
+        "related_ids"
+      ],
+      "title": "Clarification",
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "description": "为什么需要该前置任务",
+          "minLength": 1,
+          "type": "string"
+        },
+        "task_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "reason"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
+    "Estimate": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "description": "估算依据",
+          "minLength": 1,
+          "type": "string"
+        },
+        "unit": {
+          "description": "单位，如 人时",
+          "minLength": 1,
+          "type": "string"
+        },
+        "value": {
+          "description": "估算数值（正整数）",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "unit",
+        "basis"
+      ],
+      "title": "Estimate",
+      "type": "object"
+    },
+    "InputRef": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "description": "设计条目 ID 或 <task_id>/<output_id>",
+          "minLength": 1,
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "design",
+            "task_output"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "design_contract",
+            "implementation",
+            "verification_report",
+            "integration_report",
+            "support_artifact"
+          ],
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "ref",
+        "type"
+      ],
+      "title": "InputRef",
+      "type": "object"
+    },
+    "OutputRef": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "description": "产物 ID，在计划内唯一",
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "design_contract",
+            "implementation",
+            "verification_report",
+            "integration_report",
+            "support_artifact"
+          ],
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "description"
+      ],
+      "title": "OutputRef",
+      "type": "object"
+    },
+    "RunConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "max_concurrency": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "ordering": {
+          "description": "排序键，按顺序生效",
+          "items": {
+            "enum": [
+              "priority",
+              "task_id"
+            ],
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "role_capacity": {
+          "additionalProperties": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "description": "角色 -> 容量，正整数",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "max_concurrency",
+        "role_capacity",
+        "ordering"
+      ],
+      "title": "RunConfig",
+      "type": "object"
+    },
+    "SpecRef": {
+      "additionalProperties": false,
+      "properties": {
+        "spec_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "spec_id",
+        "version"
+      ],
+      "title": "SpecRef",
+      "type": "object"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptance": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "depends_on": {
+          "items": {
+            "$ref": "#/$defs/Dependency"
+          },
+          "type": "array"
+        },
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "design_refs": {
+          "items": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "estimated_effort": {
+          "$ref": "#/$defs/Estimate"
+        },
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/InputRef"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "implementation",
+            "verification",
+            "integration",
+            "support"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "module_ids": {
+          "items": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/OutputRef"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "priority": {
+          "description": "非负整数，越小越优先",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "requirement_ids": {
+          "items": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "stage": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "description",
+        "requirement_ids",
+        "module_ids",
+        "design_refs",
+        "kind",
+        "stage",
+        "role",
+        "inputs",
+        "outputs",
+        "acceptance",
+        "depends_on",
+        "priority",
+        "estimated_effort"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "TaskPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "assumptions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "clarifications": {
+          "items": {
+            "$ref": "#/$defs/Clarification"
+          },
+          "type": "array"
+        },
+        "config": {
+          "$ref": "#/$defs/RunConfig"
+        },
+        "generation_mode": {
+          "enum": [
+            "live_llm",
+            "offline_rule",
+            "fixture_replay",
+            "curated_example"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "plan_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "schema_version": {
+          "enum": [
+            "1.0"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "spec_ref": {
+          "$ref": "#/$defs/SpecRef"
+        },
+        "tasks": {
+          "items": {
+            "$ref": "#/$defs/Task"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "template_ref": {
+          "$ref": "#/$defs/TemplateRef"
+        }
+      },
+      "required": [
+        "schema_version",
+        "plan_id",
+        "revision",
+        "spec_ref",
+        "template_ref",
+        "config",
+        "generation_mode",
+        "tasks"
+      ],
+      "title": "TaskPlan",
+      "type": "object"
+    },
+    "TemplateRef": {
+      "additionalProperties": false,
+      "properties": {
+        "template_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "template_id",
+        "version"
+      ],
+      "title": "TemplateRef",
+      "type": "object"
+    }
+  },
+  "$id": "task_plan.schema.json",
+  "$ref": "#/$defs/TaskPlan",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TaskPlan"
+}

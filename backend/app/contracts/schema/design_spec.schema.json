@@ -1,0 +1,240 @@
+{
+  "$defs": {
+    "Constraint": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "description": "stack / platform / security / infrastructure / other",
+          "minLength": 1,
+          "type": "string"
+        },
+        "detail": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "specified",
+            "not_applicable",
+            "unspecified"
+          ],
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "detail",
+        "status"
+      ],
+      "title": "Constraint",
+      "type": "object"
+    },
+    "DesignItem": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "kind": {
+          "description": "page / interface / entity / rule / other",
+          "minLength": 1,
+          "type": "string"
+        },
+        "requirement_ids": {
+          "items": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "description",
+        "requirement_ids"
+      ],
+      "title": "DesignItem",
+      "type": "object"
+    },
+    "DesignSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "constraints": {
+          "items": {
+            "$ref": "#/$defs/Constraint"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "design_items": {
+          "items": {
+            "$ref": "#/$defs/DesignItem"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "modules": {
+          "items": {
+            "$ref": "#/$defs/Module"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "product": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "requirements": {
+          "items": {
+            "$ref": "#/$defs/Requirement"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "schema_version": {
+          "enum": [
+            "1.0"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "spec_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema_version",
+        "spec_id",
+        "version",
+        "product",
+        "scope",
+        "requirements",
+        "modules",
+        "design_items",
+        "constraints"
+      ],
+      "title": "DesignSpec",
+      "type": "object"
+    },
+    "Module": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        },
+        "requirement_ids": {
+          "description": "关联需求编号",
+          "items": {
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "responsibility": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "responsibility",
+        "requirement_ids"
+      ],
+      "title": "Module",
+      "type": "object"
+    },
+    "Requirement": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptance": {
+          "description": "可验证的验收口径",
+          "minLength": 1,
+          "type": "string"
+        },
+        "goal": {
+          "description": "需求希望实现的行为",
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "description": "需求稳定编号，如 R1",
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "goal",
+        "acceptance"
+      ],
+      "title": "Requirement",
+      "type": "object"
+    },
+    "Scope": {
+      "additionalProperties": false,
+      "properties": {
+        "excluded": {
+          "description": "一期明确排除项，可为空",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "goal": {
+          "description": "产品目标",
+          "minLength": 1,
+          "type": "string"
+        },
+        "included": {
+          "description": "首期包含的能力",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "goal",
+        "included",
+        "excluded"
+      ],
+      "title": "Scope",
+      "type": "object"
+    }
+  },
+  "$id": "design_spec.schema.json",
+  "$ref": "#/$defs/DesignSpec",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DesignSpec"
+}

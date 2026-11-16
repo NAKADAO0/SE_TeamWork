@@ -1,0 +1,119 @@
+{
+  "schema_version": "1.0",
+  "spec_id": "SPEC-CHAT",
+  "version": 1,
+  "product": "聊天 MVP",
+  "scope": {
+    "goal": "复用登录会话，支持单聊文本消息、历史分页及会话隔离。",
+    "included": [
+      "单聊文本消息发送与查询",
+      "历史消息分页读取",
+      "会话成员隔离"
+    ],
+    "excluded": [
+      "群聊",
+      "支付",
+      "音视频通话",
+      "消息推送"
+    ]
+  },
+  "requirements": [
+    {
+      "id": "R1",
+      "goal": "发送文本消息",
+      "acceptance": "发送后可查到相同消息 ID"
+    },
+    {
+      "id": "R2",
+      "goal": "分页读取会话",
+      "acceptance": "翻页无重复消息"
+    }
+  ],
+  "modules": [
+    {
+      "id": "M-MSG",
+      "responsibility": "消息写入、鉴权与会话隔离",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "M-HISTORY",
+      "responsibility": "游标分页与历史读取",
+      "requirement_ids": [
+        "R2"
+      ]
+    },
+    {
+      "id": "M-CHAT-UI",
+      "responsibility": "会话输入、发送状态与历史列表界面",
+      "requirement_ids": [
+        "R1",
+        "R2"
+      ]
+    }
+  ],
+  "design_items": [
+    {
+      "id": "I-SEND-API",
+      "kind": "interface",
+      "description": "POST 消息接口，返回消息 ID",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "I-LIST-API",
+      "kind": "interface",
+      "description": "GET 历史分页接口，游标分页且无重复",
+      "requirement_ids": [
+        "R2"
+      ]
+    },
+    {
+      "id": "I-MSG-ENTITY",
+      "kind": "entity",
+      "description": "消息实体：消息 ID、会话 ID、发送者、正文、创建时间",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "I-SESSION-RULE",
+      "kind": "rule",
+      "description": "非会话成员写入与读取均被拒绝",
+      "requirement_ids": [
+        "R1"
+      ]
+    },
+    {
+      "id": "P-CHAT-PAGE",
+      "kind": "page",
+      "description": "会话页：发送框、失败重试、历史列表与加载更多",
+      "requirement_ids": [
+        "R1",
+        "R2"
+      ]
+    }
+  ],
+  "constraints": [
+    {
+      "id": "C-STACK",
+      "category": "stack",
+      "detail": "复用既有登录会话与 HTTP JSON 接口",
+      "status": "specified"
+    },
+    {
+      "id": "C-PLATFORM",
+      "category": "platform",
+      "detail": "Web 单页工作台演示",
+      "status": "specified"
+    },
+    {
+      "id": "C-SECURITY",
+      "category": "security",
+      "detail": "非会话成员不可读写消息",
+      "status": "specified"
+    }
+  ]
+}

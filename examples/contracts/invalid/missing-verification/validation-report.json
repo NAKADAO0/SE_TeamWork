@@ -1,0 +1,78 @@
+{
+  "blocked": true,
+  "content_digest": "ce24533c2843946baff52c1c3d1d35b0b7c40e3bab78953ff39000acc67defd4",
+  "coverage": {
+    "implementation_ratio": 1.0,
+    "requirements": [
+      {
+        "implementation_task_ids": [
+          "C1",
+          "C2",
+          "C3"
+        ],
+        "requirement_id": "R1",
+        "status": "covered",
+        "verification_task_ids": [
+          "C6"
+        ]
+      },
+      {
+        "implementation_task_ids": [
+          "C4",
+          "C5"
+        ],
+        "requirement_id": "R2",
+        "status": "missing_verification",
+        "verification_task_ids": []
+      }
+    ],
+    "verification_ratio": 0.5
+  },
+  "issues": [
+    {
+      "code": "DEPENDENCY_UNKNOWN",
+      "field_path": "tasks[6].depends_on[1].task_id",
+      "message": "任务 C8 的前置任务 C7 不存在",
+      "object_id": "C8",
+      "related_ids": [
+        "C7"
+      ],
+      "severity": "error",
+      "suggested_action": "补充该前置任务，或删除该依赖；校验器不会自动删边"
+    },
+    {
+      "code": "ARTIFACT_PRODUCER_UNKNOWN",
+      "field_path": "tasks[6].inputs[3].ref",
+      "message": "任务 C8 的输入引用了不存在的生产任务 C7（引用 C7/O-PAGE-VERIFY）",
+      "object_id": "C8",
+      "related_ids": [
+        "C7",
+        "O-PAGE-VERIFY"
+      ],
+      "severity": "error",
+      "suggested_action": "修正 inputs.ref 中的任务 ID，或补充该生产任务"
+    },
+    {
+      "code": "COVERAGE_VERIFICATION_MISSING",
+      "field_path": "spec.requirements[1]",
+      "message": "需求 R2 没有验证任务，无法确认验收口径被覆盖",
+      "object_id": "R2",
+      "related_ids": [
+        "C4",
+        "C5"
+      ],
+      "severity": "error",
+      "suggested_action": "为需求 R2 补充 kind=verification 的任务，或修正相关任务的 requirement_ids"
+    }
+  ],
+  "schema_version": "1.0",
+  "summary": {
+    "errors": 3,
+    "warnings": 0
+  },
+  "target": {
+    "kind": "task_plan",
+    "plan_id": "PLAN-CHAT",
+    "revision": 1
+  }
+}

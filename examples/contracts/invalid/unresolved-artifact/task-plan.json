@@ -1,0 +1,506 @@
+{
+  "assumptions": [
+    "消息 ID 由服务端生成，客户端不做本地去重",
+    "历史分页使用游标而非页码，排序依据为服务端时间"
+  ],
+  "clarifications": [],
+  "config": {
+    "max_concurrency": 2,
+    "ordering": [
+      "priority",
+      "task_id"
+    ],
+    "role_capacity": {
+      "backend": 1,
+      "frontend": 1,
+      "qa": 1
+    }
+  },
+  "generation_mode": "curated_example",
+  "plan_id": "PLAN-CHAT",
+  "revision": 1,
+  "schema_version": "1.0",
+  "spec_ref": {
+    "spec_id": "SPEC-CHAT",
+    "version": 1
+  },
+  "tasks": [
+    {
+      "acceptance": [
+        "发送响应与查询结果共用消息 ID",
+        "非会话成员读写被拒绝的规则写入契约"
+      ],
+      "depends_on": [],
+      "description": "确认消息实体、发送接口与会话隔离规则，作为前后端共同实现的输入。",
+      "design_refs": [
+        "I-MSG-ENTITY",
+        "I-SEND-API",
+        "I-SESSION-RULE"
+      ],
+      "estimated_effort": {
+        "basis": "同时确认消息实体、发送接口与隔离规则",
+        "unit": "人时",
+        "value": 2
+      },
+      "id": "C1",
+      "inputs": [
+        {
+          "ref": "I-MSG-ENTITY",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-SEND-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-SESSION-RULE",
+          "source": "design",
+          "type": "design_contract"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-MSG"
+      ],
+      "outputs": [
+        {
+          "description": "消息实体、发送接口与会话隔离规则契约",
+          "id": "O-CONTRACT",
+          "type": "design_contract"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "backend",
+      "stage": "implement",
+      "title": "定义消息与会话契约"
+    },
+    {
+      "acceptance": [
+        "非会话成员写入被拒绝",
+        "发送成功返回服务端消息 ID"
+      ],
+      "depends_on": [
+        {
+          "reason": "消息 ID 与会话隔离规则需要先由契约确认",
+          "task_id": "C1"
+        }
+      ],
+      "description": "实现消息写入接口，按契约校验会话成员身份并返回服务端消息 ID。",
+      "design_refs": [
+        "I-SEND-API",
+        "I-SESSION-RULE"
+      ],
+      "estimated_effort": {
+        "basis": "写入接口、会话成员鉴权与消息 ID 生成",
+        "unit": "人时",
+        "value": 4
+      },
+      "id": "C2",
+      "inputs": [
+        {
+          "ref": "I-SEND-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-SESSION-RULE",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "C1/O-CONTRACT",
+          "source": "task_output",
+          "type": "design_contract"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-MSG"
+      ],
+      "outputs": [
+        {
+          "description": "消息写入与查询服务",
+          "id": "O-MSG-SERVICE",
+          "type": "implementation"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "backend",
+      "stage": "implement",
+      "title": "实现消息写入与鉴权"
+    },
+    {
+      "acceptance": [
+        "发送失败可重试且保留原文",
+        "发送成功展示服务端返回的消息 ID"
+      ],
+      "depends_on": [
+        {
+          "reason": "界面字段与错误提示需要按契约实现",
+          "task_id": "C1"
+        }
+      ],
+      "description": "实现会话页发送框、发送状态与失败重试，展示服务端返回的消息 ID。",
+      "design_refs": [
+        "P-CHAT-PAGE",
+        "I-SEND-API"
+      ],
+      "estimated_effort": {
+        "basis": "输入框、发送状态与失败重试交互",
+        "unit": "人时",
+        "value": 3
+      },
+      "id": "C3",
+      "inputs": [
+        {
+          "ref": "P-CHAT-PAGE",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "C1/O-CONTRACT",
+          "source": "task_output",
+          "type": "design_contract"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-CHAT-UI"
+      ],
+      "outputs": [
+        {
+          "description": "会话输入、发送状态与失败重试界面",
+          "id": "O-CHAT-PAGE",
+          "type": "implementation"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "frontend",
+      "stage": "implement",
+      "title": "开发聊天输入与发送状态"
+    },
+    {
+      "acceptance": [
+        "连续两页没有重复消息",
+        "末页与空会话返回空列表"
+      ],
+      "depends_on": [
+        {
+          "reason": "复用消息查询服务与鉴权",
+          "task_id": "C2"
+        }
+      ],
+      "description": "实现按游标读取历史消息的接口，保证连续翻页无重复。",
+      "design_refs": [
+        "I-LIST-API",
+        "I-MSG-ENTITY"
+      ],
+      "estimated_effort": {
+        "basis": "游标编码、分页查询与边界处理",
+        "unit": "人时",
+        "value": 3
+      },
+      "id": "C4",
+      "inputs": [
+        {
+          "ref": "I-LIST-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "C2/O-MSG-SERVICE",
+          "source": "task_output",
+          "type": "implementation"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-HISTORY"
+      ],
+      "outputs": [
+        {
+          "description": "游标历史分页接口",
+          "id": "O-HISTORY-API",
+          "type": "implementation"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R2"
+      ],
+      "role": "backend",
+      "stage": "implement",
+      "title": "实现游标历史查询"
+    },
+    {
+      "acceptance": [
+        "加载旧消息时保留当前阅读位置",
+        "翻页后无重复条目"
+      ],
+      "depends_on": [
+        {
+          "reason": "沿用会话页面状态管理",
+          "task_id": "C3"
+        },
+        {
+          "reason": "需要游标分页接口",
+          "task_id": "C4"
+        }
+      ],
+      "description": "把历史分页接口接入会话页，加载旧消息时保留当前阅读位置。",
+      "design_refs": [
+        "P-CHAT-PAGE",
+        "I-LIST-API"
+      ],
+      "estimated_effort": {
+        "basis": "历史列表渲染、滚动位置保持与加载更多",
+        "unit": "人时",
+        "value": 3
+      },
+      "id": "C5",
+      "inputs": [
+        {
+          "ref": "P-CHAT-PAGE",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "C3/O-CHAT-PAGE",
+          "source": "task_output",
+          "type": "implementation"
+        },
+        {
+          "ref": "C4/O-HISTORY-API",
+          "source": "task_output",
+          "type": "implementation"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-CHAT-UI"
+      ],
+      "outputs": [
+        {
+          "description": "历史列表与加载更多交互",
+          "id": "O-HISTORY-UI",
+          "type": "implementation"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R2"
+      ],
+      "role": "frontend",
+      "stage": "implement",
+      "title": "接入历史列表与加载更多"
+    },
+    {
+      "acceptance": [
+        "本会话查到已发送 ID，其他会话不可见",
+        "非法成员写入被拒绝"
+      ],
+      "depends_on": [
+        {
+          "reason": "需要可调用的消息服务",
+          "task_id": "C2"
+        },
+        {
+          "reason": "需要可操作的发送界面",
+          "task_id": "C3"
+        }
+      ],
+      "description": "按验收口径验证消息发送、消息 ID 回读与跨会话隔离。",
+      "design_refs": [
+        "I-SEND-API",
+        "I-SESSION-RULE"
+      ],
+      "estimated_effort": {
+        "basis": "发送、回读与跨会话隔离用例",
+        "unit": "人时",
+        "value": 2
+      },
+      "id": "C6",
+      "inputs": [
+        {
+          "ref": "I-SESSION-RULE",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "C2/O-API",
+          "source": "task_output",
+          "type": "implementation"
+        },
+        {
+          "ref": "C3/O-CHAT-PAGE",
+          "source": "task_output",
+          "type": "implementation"
+        }
+      ],
+      "kind": "verification",
+      "module_ids": [
+        "M-MSG"
+      ],
+      "outputs": [
+        {
+          "description": "发送与会话隔离验证报告",
+          "id": "O-SEND-VERIFY",
+          "type": "verification_report"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "qa",
+      "stage": "verify",
+      "title": "验证发送与会话隔离"
+    },
+    {
+      "acceptance": [
+        "空会话、末页与连续翻页均符合契约",
+        "翻页结果无重复消息 ID"
+      ],
+      "depends_on": [
+        {
+          "reason": "需要分页接口",
+          "task_id": "C4"
+        },
+        {
+          "reason": "需要可操作的加载更多界面",
+          "task_id": "C5"
+        }
+      ],
+      "description": "验证空会话、末页与连续翻页，确认分页结果无重复消息。",
+      "design_refs": [
+        "I-LIST-API"
+      ],
+      "estimated_effort": {
+        "basis": "边界用例与分页重复检查",
+        "unit": "人时",
+        "value": 2
+      },
+      "id": "C7",
+      "inputs": [
+        {
+          "ref": "I-LIST-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "C4/O-HISTORY-API",
+          "source": "task_output",
+          "type": "implementation"
+        },
+        {
+          "ref": "C5/O-HISTORY-UI",
+          "source": "task_output",
+          "type": "implementation"
+        }
+      ],
+      "kind": "verification",
+      "module_ids": [
+        "M-HISTORY"
+      ],
+      "outputs": [
+        {
+          "description": "分页边界验证报告",
+          "id": "O-PAGE-VERIFY",
+          "type": "verification_report"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R2"
+      ],
+      "role": "qa",
+      "stage": "verify",
+      "title": "验证分页边界"
+    },
+    {
+      "acceptance": [
+        "发送后刷新与翻页仍可按 ID 定位同一消息"
+      ],
+      "depends_on": [
+        {
+          "reason": "需要发送与会话隔离验证结论",
+          "task_id": "C6"
+        },
+        {
+          "reason": "需要分页边界验证结论",
+          "task_id": "C7"
+        }
+      ],
+      "description": "串联发送、刷新、翻页与回读，确认同一消息 ID 在全流程一致。",
+      "design_refs": [
+        "I-SEND-API",
+        "I-LIST-API",
+        "P-CHAT-PAGE"
+      ],
+      "estimated_effort": {
+        "basis": "端到端场景编排与回归",
+        "unit": "人时",
+        "value": 2
+      },
+      "id": "C8",
+      "inputs": [
+        {
+          "ref": "I-SEND-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-LIST-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "C6/O-SEND-VERIFY",
+          "source": "task_output",
+          "type": "verification_report"
+        },
+        {
+          "ref": "C7/O-PAGE-VERIFY",
+          "source": "task_output",
+          "type": "verification_report"
+        }
+      ],
+      "kind": "integration",
+      "module_ids": [
+        "M-MSG",
+        "M-HISTORY",
+        "M-CHAT-UI"
+      ],
+      "outputs": [
+        {
+          "description": "发送到历史回读端到端验收清单",
+          "id": "O-E2E-CHECK",
+          "type": "integration_report"
+        }
+      ],
+      "priority": 2,
+      "requirement_ids": [
+        "R1",
+        "R2"
+      ],
+      "role": "qa",
+      "stage": "integrate",
+      "title": "联调发送到历史回读"
+    }
+  ],
+  "template_ref": {
+    "template_id": "TPL-DEFAULT",
+    "version": 1
+  }
+}
