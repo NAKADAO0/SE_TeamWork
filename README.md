@@ -56,3 +56,16 @@ python -m uvicorn backend.api:app --host 127.0.0.1 --port 8010
 5. PUT 保存下一版后需重新校验、编排和确认。旧版仍能导出。运行 python -m unittest discover -s tests 验证完整链路。
 
 本地演示使用单个 Uvicorn worker。作业状态持久化，服务重启将未结束作业标记失败，可重新提交。成员 2 可向 create_app 注入 planner(spec) 返回任务列表；成员 3 注入 validator(plan) 返回错误列表；成员 4 注入 compiler(plan) 返回批次列表。默认使用 Demo 的 Node 规则服务和基础字段检查。实时模式未配置时返回 503。前端成员通过这些端点替换 sessionStorage 调用。
+
+## v2 工作台（成员 1 交付）
+
+`frontend/` 是规格输入与任务编辑工作台的实现，用 fixture 数据驱动，可直接演示：
+
+~~~sh
+python -m http.server 8010 --bind 127.0.0.1
+~~~
+
+打开 http://127.0.0.1:8010/frontend/ ，流程为 载入样例 → 检查缺口 → 确认规格 → 生成计划 → 校验 → 编排 → 确认版本 → 导出。
+接口契约见 `docs/frontend-api-contract.md`，交接说明见 `docs/handoff/成员1-交接.md`。
+Node 22+ 运行 `npm test` 可复核状态机、缺口检查、环检测、排批与视图冒烟；加 `?api=http` 可切到真实服务端。
+

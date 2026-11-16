@@ -1,0 +1,48 @@
+{
+  "schema_version": "0.1-draft",
+  "spec_id": "SPEC-CHAT",
+  "version": 1,
+  "product": {
+    "name": "聊天 MVP",
+    "scope": "复用现有登录会话，提供单聊文本发送、会话查询、历史分页与无权限访问拒绝。",
+    "excluded": ["群聊", "支付", "音视频通话"]
+  },
+  "requirements": [
+    {
+      "id": "R-MSG-01",
+      "goal": "发送文本消息并能按 ID 查回",
+      "acceptance": ["发送成功后查询会话，结果包含相同的消息 ID"],
+      "module_ids": ["M-MSG", "M-WEB"]
+    },
+    {
+      "id": "R-MSG-02",
+      "goal": "分页读取历史消息",
+      "acceptance": ["连续两页无重复消息", "到达末页时返回空列表而不是错误"],
+      "module_ids": ["M-MSG", "M-WEB"]
+    }
+  ],
+  "modules": [
+    {
+      "id": "M-MSG",
+      "name": "消息服务",
+      "responsibility": "消息写入、会话鉴权、游标分页",
+      "requirement_ids": ["R-MSG-01", "R-MSG-02"]
+    },
+    {
+      "id": "M-WEB",
+      "name": "聊天界面",
+      "responsibility": "输入与发送状态、历史列表、失败重试",
+      "requirement_ids": ["R-MSG-01", "R-MSG-02"]
+    }
+  ],
+  "design": [
+    { "id": "I-SEND", "title": "POST /messages 发送接口", "kind": "interface" },
+    { "id": "I-LIST", "title": "GET /sessions/{id}/messages 分页接口", "kind": "interface" },
+    { "id": "I-ERR", "title": "403/409 错误码与提示文案", "kind": "consistency" }
+  ],
+  "constraints": {
+    "tech_stack": ["Python 3.12", "SQLite", "原生 ES Module"],
+    "platforms": ["本地浏览器"],
+    "open_items": ["群聊与消息撤回不在本期范围"]
+  }
+}
