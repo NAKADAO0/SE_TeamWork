@@ -148,7 +148,7 @@ export function mountGraph(root, { store, actions }) {
           .join(" ");
         const left = PAD + pos.ci * COL_W;
         const top = PAD + pos.ri * ROW_H;
-        return `<button type="button" class="${classes}" data-task="${escapeHtml(task.id)}"
+        return `<button type="button" class="${escapeHtml(classes)}" data-task="${escapeHtml(task.id)}"
           style="left:${left}px;top:${top}px;width:${CARD_W}px;height:${CARD_H}px">
           <b>${escapeHtml(task.title)}</b>
           <small>${escapeHtml(task.id)} · ${escapeHtml(task.role)}</small>
