@@ -167,6 +167,34 @@ async function pollJob(jobId) {
   }
 }
 
+// Use the existing graph navigation; transfer only a compiled snapshot of the current revision.
+const graphNavigation = document.querySelector('nav a[href="../graph.html"]');
+graphNavigation?.addEventListener("click", (event) => {
+  const state = store.getState();
+  if (!state.plan) return;
+  event.preventDefault();
+  const current = !state.stale && state.execution && state.execution.compiled !== false &&
+    [PHASE.PLAN_COMPILED, PHASE.PLAN_CONFIRMED].includes(state.phase) &&
+    state.execution.plan_ref?.revision === state.plan.revision;
+  if (!current) {
+    notice("warn", "请先完成当前修订的编排，再查看图谱");
+    return;
+  }
+  try {
+    sessionStorage.setItem("se.plan", JSON.stringify({
+      ...state.plan,
+      source: "workspace",
+      status: state.phase === PHASE.PLAN_CONFIRMED ? "confirmed" : "compiled",
+      spec: state.spec?.draft ?? {},
+      capacity: state.config.max_concurrency,
+      batches: state.execution.batches,
+    }));
+    location.href = "../graph.html?sample=current";
+  } catch (error) {
+    fail(error);
+  }
+});
+
 /* ---------- 校验、编排、确认、导出 ---------- */
 
 async function runValidation() {

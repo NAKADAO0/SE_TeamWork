@@ -25,7 +25,7 @@ $("run").onclick=()=>{
   try {
     const spec=JSON.parse($("spec").value), tasks=decompose(spec);
     const capacity=Number($("capacity").value), batches=compile(tasks,capacity);
-    plan={sample:$("sample").value,mode:"offline_rule",spec,capacity,tasks,batches};
+    plan={sample:$("sample").value,mode:"offline_rule",status:"compiled",spec,capacity,tasks,batches};
     sessionStorage.setItem("se.plan",JSON.stringify(plan));
     for(const batch of batches){
       const row=document.createElement("li");

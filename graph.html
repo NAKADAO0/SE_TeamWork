@@ -2,19 +2,20 @@
 <div class="graph-heading">
   <h1>工作流图谱</h1>
   <select id="graph-sample" aria-label="选择案例"><option value="chat">聊天 MVP</option><option value="community">内容社区 MVP</option><option value="complex">校园活动报名</option></select>
+  <select id="graph-version" aria-label="选择计划版本"></select>
   <div id="plan-status" aria-label="当前计划状态"></div>
   <div class="page-actions"><a href="frontend/" id="return-link">返回工作台</a><button id="fullscreen" type="button">全屏</button></div>
 </div>
 <p id="summary" aria-live="polite">正在加载…</p>
 <div class="graph-layout">
-  <div class="panel-shell task-shell"><section id="task-panel" class="task-rail" aria-label="阶段与任务进度"><div id="progress"></div><div id="task-list"></div></section><button type="button" class="panel-handle" id="toggle-tasks" aria-controls="task-panel" aria-expanded="true" aria-label="收起任务列表" title="收起任务列表">‹</button></div>
+  <div class="panel-shell task-shell"><div class="panel-resizer" data-resize="tasks" role="separator" aria-label="调整任务列表宽度" aria-orientation="vertical" aria-valuemin="180" aria-valuemax="420" aria-valuenow="220" tabindex="0"></div><section id="task-panel" class="task-rail" aria-label="阶段与任务进度"><div id="progress"></div><div id="task-list"></div></section><button type="button" class="panel-handle" id="toggle-tasks" aria-controls="task-panel" aria-expanded="true" aria-label="收起任务列表" title="收起任务列表">‹</button></div>
   <section class="graph-center" aria-label="工作流画布">
     <div class="graph-toolbar">
-      <div class="layout-switch" role="group" aria-label="图谱排列方式"><button type="button" data-layout="dependencies" aria-pressed="true" title="按前置关系分层">依赖图</button><button type="button" data-layout="batches" aria-pressed="false" title="按编排结果分批">批次图</button></div>
+      <div class="layout-switch" role="group" aria-label="图谱排列方式"><button type="button" data-layout="batches" aria-pressed="true" title="按编排结果分批">批次图</button><button type="button" data-layout="dependencies" aria-pressed="false" title="按前置关系分层">依赖图</button></div>
       <div class="workspace-zoom" role="group" aria-label="依赖图缩放" title="⌘ / Ctrl + 滚轮缩放"><button type="button" id="zoom-out" aria-label="缩小依赖图">−</button><output id="zoom-value" aria-live="polite">100%</output><button type="button" id="zoom-in" aria-label="放大依赖图">＋</button><button type="button" id="zoom-fit">适应画布</button><button type="button" id="zoom-reset" title="恢复 100%">重置</button></div>
       <details class="legend-menu"><summary>状态</summary><div id="status-legend" aria-label="任务状态图例"></div></details>
     </div>
     <section id="canvas" aria-label="任务依赖图"></section>
   </section>
-  <div class="panel-shell detail-shell"><button type="button" class="panel-handle" id="toggle-detail" aria-controls="detail" aria-expanded="true" aria-label="收起任务详情" title="收起任务详情">›</button><section id="detail" aria-label="任务详情" aria-live="polite">选择任务查看详情。</section></div>
+  <div class="panel-shell detail-shell"><div class="panel-resizer" data-resize="detail" role="separator" aria-label="调整任务详情宽度" aria-orientation="vertical" aria-valuemin="200" aria-valuemax="440" aria-valuenow="248" tabindex="0"></div><button type="button" class="panel-handle" id="toggle-detail" aria-controls="detail" aria-expanded="true" aria-label="收起任务详情" title="收起任务详情">›</button><section id="detail" aria-label="任务详情" aria-live="polite">选择任务查看详情。</section></div>
 </div><script type="module" src="demo/graph.js"></script></main></body></html>
