@@ -1,9 +1,12 @@
+import { enhanceSelect } from './graph-select.js';
 import { topologicalLevels, findCycle } from '../frontend/src/shared/graph.js';
+import { loadRemoteGraph } from './graph-api.js';
 import { exampleVersions } from './graph-versions.js';
 import { sampleProgress } from './graph-progress.js';
 const canvas = document.querySelector('#canvas');
 const view = document.querySelector('#graph-view');
 const toggle = document.querySelector('#fullscreen');
+for (const id of ['graph-sample', 'graph-version']) enhanceSelect(document.getElementById(id));
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const text = value => Array.isArray(value) ? value.map(item => typeof item === 'object' && item !== null ? item.description ?? item.id ?? JSON.stringify(item) : item).join('；') : value || '未提供';
 const roles = { backend: '后端', frontend: '前端', qa: '测试' };
@@ -18,42 +21,50 @@ function statusBadge(status) {
 }
 
 async function show() {
-  const key = new URLSearchParams(location.search).get('sample');
+  const params = new URLSearchParams(location.search);
+  const remote = params.has('api') ? await loadRemoteGraph(params) : null;
+  const key = params.get('sample');
   const stored = sessionStorage.getItem('se.plan');
-  const preview = ['chat', 'community', 'complex'].includes(key) || !stored;
-  if (key === 'current' && !stored) throw new Error('当前标签页没有已编排计划，请先到工作台编排');
+  const preview = !remote && (['chat', 'community', 'complex'].includes(key) || !stored);
+  if (!remote && key === 'current' && !stored) throw new Error('当前标签页没有已编排计划，请先到工作台编排');
   const sample = ['chat', 'community', 'complex'].includes(key) ? key : 'chat';
   const response = preview ? await fetch(`examples/${sample}-plan.json`) : null;
   if (response && !response.ok) throw new Error('样例读取失败');
-  const sourcePlan = preview ? await response.json() : JSON.parse(stored);
-  const versions = preview ? exampleVersions(sourcePlan) : [sourcePlan];
+  const sourcePlan = remote ? remote.plan : preview ? await response.json() : JSON.parse(stored);
+  const versions = remote ? remote.revisions : preview ? exampleVersions(sourcePlan) : [sourcePlan];
   const requestedRevision = new URLSearchParams(location.search).get('revision');
-  const plan = requestedRevision === null ? versions[0] : versions.find(item => String(item.revision ?? 1) === requestedRevision);
+  const plan = remote ? sourcePlan : requestedRevision === null ? versions[0] : versions.find(item => String(item.revision ?? 1) === requestedRevision);
   if (!plan) throw new Error('该计划版本不存在，请重新选择计划');
   const versionPicker = document.querySelector('#graph-version');
   versionPicker.replaceChildren(...versions.map((item, index) => new Option(
-    `r${item.revision ?? 1}${index === 0 ? preview ? ' · 最新' : ' · 当前' : ''}`,
+    `r${item.revision ?? 1}${index === 0 ? preview || remote ? ' · 最新' : ' · 当前' : ''}`,
     String(item.revision ?? 1),
   )));
   versionPicker.value = String(plan.revision ?? 1);
+  versionPicker.dispatchEvent(new Event('graph-select-sync'));
   versionPicker.addEventListener('change', () => {
     const url = new URL(location.href);
-    url.searchParams.set('sample', preview ? sample : 'current');
+    if (remote) url.searchParams.set('plan_id', remote.planId);
+    else url.searchParams.set('sample', preview ? sample : 'current');
     url.searchParams.set('revision', versionPicker.value);
     location.href = url.href;
   });
   const { tasks, batches, spec } = plan;
   if (!Array.isArray(tasks) || !tasks.length || !Array.isArray(batches)) throw new Error('计划缺少任务或批次');
   const picker = document.querySelector('#graph-sample');
-  if (stored) picker.add(new Option('当前计划', 'current'));
-  picker.value = preview ? sample : 'current';
+  if (remote) picker.replaceChildren(...remote.plans.map(item => new Option(item.title, item.plan_id)));
+  if (!remote && stored) picker.add(new Option('当前计划', 'current'));
+  picker.value = remote ? remote.planId : preview ? sample : 'current';
+  picker.dispatchEvent(new Event('graph-select-sync'));
   picker.addEventListener('change', () => {
     const url = new URL(location.href);
-    if (picker.value === 'current') url.searchParams.set('sample', 'current');
+    if (remote) url.searchParams.set('plan_id', picker.value);
+    else if (picker.value === 'current') url.searchParams.set('sample', 'current');
     else url.searchParams.set('sample', picker.value);
     url.searchParams.delete('revision');
     location.href = url.href;
   });
+  if (remote && !plan.batches?.length) throw new Error(`修订 r${plan.revision} 尚未编排，请先在工作台编排`);
   const metadata = preview ? sampleProgress[sample] : null;
   const execution = metadata?.execution ?? {};
   const statusOf = id => Object.hasOwn(taskStates, execution[id]?.status) ? execution[id].status : 'unknown';
