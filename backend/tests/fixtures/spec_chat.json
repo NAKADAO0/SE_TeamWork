@@ -1,0 +1,36 @@
+{
+  "product": "聊天 MVP",
+  "scope": {
+    "include": ["单聊文本消息", "会话列表", "历史分页"],
+    "exclude": ["群聊", "支付", "音视频"]
+  },
+  "requirements": [
+    {
+      "id": "R-MSG-01",
+      "goal": "发送文本消息并能在会话中查询到",
+      "acceptance": ["发送成功后查询会话，结果包含相同的消息 ID"]
+    },
+    {
+      "id": "R-MSG-02",
+      "goal": "历史消息分页拉取",
+      "acceptance": ["首页返回不超过 20 条", "下一页不重复上页最后一条"]
+    }
+  ],
+  "modules": [
+    {
+      "id": "M-MSG",
+      "responsibility": "消息收发与持久化",
+      "requirement_ids": ["R-MSG-01", "R-MSG-02"]
+    }
+  ],
+  "design_refs": [
+    {"id": "I-SEND", "type": "interface", "summary": "POST /messages 发送接口"},
+    {"id": "I-LIST", "type": "interface", "summary": "GET /messages 分页查询接口"},
+    {"id": "P-CHAT", "type": "page", "summary": "会话页面，含发送框与消息列表"}
+  ],
+  "constraints": {
+    "stack": "Python + SQLite",
+    "auth": "复用现有登录会话",
+    "note": "无权限访问同一会话时返回 403"
+  }
+}

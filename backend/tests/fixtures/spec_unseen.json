@@ -1,0 +1,39 @@
+{
+  "product": "校园失物招领 MVP",
+  "scope": {
+    "include": ["发布失物", "发布招领", "按地点与时间筛选", "认领申请"],
+    "exclude": ["在线支付悬赏", "跨校互通", "实名认证对接"]
+  },
+  "requirements": [
+    {
+      "id": "R-LOST-01",
+      "goal": "发布失物信息并可被检索",
+      "acceptance": ["发布后按物品名称搜索可在结果中命中该条"]
+    },
+    {
+      "id": "R-CLAIM-01",
+      "goal": "对失物提交认领申请且同一物品只能有一条有效认领",
+      "acceptance": ["第二条认领申请被拒绝并返回冲突提示"]
+    }
+  ],
+  "modules": [
+    {
+      "id": "M-POST",
+      "responsibility": "失物与招领信息发布和检索",
+      "requirement_ids": ["R-LOST-01"]
+    },
+    {
+      "id": "M-CLAIM",
+      "responsibility": "认领申请与冲突校验",
+      "requirement_ids": ["R-CLAIM-01"]
+    }
+  ],
+  "design_refs": [
+    {"id": "I-LOST", "type": "interface", "summary": "POST /lost-items 发布接口"},
+    {"id": "I-CLAIM", "type": "interface", "summary": "POST /lost-items/{id}/claims 认领接口"}
+  ],
+  "constraints": {
+    "stack": "Python + SQLite",
+    "privacy": "联系方式仅在认领通过后可见"
+  }
+}
