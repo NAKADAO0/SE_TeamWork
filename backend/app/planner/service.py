@@ -34,6 +34,58 @@ def spec_id_of(spec: dict) -> str:
     return "SPEC-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:8]
 
 
+def _sanitize_tasks(tasks: list, top_assumptions: list, top_clarifications: list) -> list:
+    """只剥离模型误放到 task 内部的顶层字段及规范化 design 输入的产物类型别名，不捏造业务内容。"""
+    allowed_task_keys = {F.out(F.TASK, k) for k in F.TASK}
+    cleaned = []
+    for raw_t in tasks:
+        if not isinstance(raw_t, dict):
+            cleaned.append(raw_t)
+            continue
+        t = dict(raw_t)
+        # 若模型把 assumptions/clarifications 放到了任务内部，提到顶层并移除多余键
+        extra_assump = t.pop("assumptions", None)
+        if isinstance(extra_assump, list):
+            for a in extra_assump:
+                if isinstance(a, str) and a.strip() and a not in top_assumptions:
+                    top_assumptions.append(a)
+        extra_clar = t.pop("clarifications", None)
+        if isinstance(extra_clar, list):
+            for c in extra_clar:
+                if isinstance(c, dict) and c not in top_clarifications:
+                    top_clarifications.append(c)
+
+        # 规范化输入引用：source=design 的 type 统一对齐契约枚举 design_contract
+        if isinstance(t.get("inputs"), list):
+            norm_inputs = []
+            for inp in t["inputs"]:
+                if isinstance(inp, dict):
+                    item = {k: inp[k] for k in ("source", "ref", "type") if k in inp}
+                    if item.get("source") == "design":
+                        item["type"] = "design_contract"
+                    norm_inputs.append(item)
+                else:
+                    norm_inputs.append(inp)
+            t["inputs"] = norm_inputs
+
+        if isinstance(t.get("outputs"), list):
+            t["outputs"] = [
+                {k: out[k] for k in ("id", "type", "description") if k in out}
+                if isinstance(out, dict) else out
+                for out in t["outputs"]
+            ]
+
+        if isinstance(t.get("depends_on"), list):
+            t["depends_on"] = [
+                {k: dep[k] for k in ("task_id", "reason") if k in dep}
+                if isinstance(dep, dict) else dep
+                for dep in t["depends_on"]
+            ]
+
+        cleaned.append({k: v for k, v in t.items() if k in allowed_task_keys})
+    return cleaned
+
+
 def envelope(plan: dict, spec: dict, template: dict, config: dict,
              mode: str, trace_id: str) -> dict:
     """补上成员 3 的 TaskPlan schema 要求的外层字段。
@@ -44,7 +96,10 @@ def envelope(plan: dict, spec: dict, template: dict, config: dict,
         return plan
 
     roles = template.get("allowed_roles") or ["backend"]
-    tasks = F.pick(plan, F.PLAN, "tasks", []) or []
+    raw_tasks = F.pick(plan, F.PLAN, "tasks", []) or []
+    assumptions = list(F.pick(plan, F.PLAN, "assumptions", []) or [])
+    clarifications = list(F.pick(plan, F.PLAN, "clarifications", []) or [])
+    tasks = _sanitize_tasks(raw_tasks, assumptions, clarifications)
 
     return {
         F.out(F.PLAN, "schema_version"): F.SCHEMA_VERSION,
@@ -65,8 +120,8 @@ def envelope(plan: dict, spec: dict, template: dict, config: dict,
         },
         F.out(F.PLAN, "generation_mode"): mode,
         F.out(F.PLAN, "tasks"): tasks,
-        F.out(F.PLAN, "assumptions"): F.pick(plan, F.PLAN, "assumptions", []) or [],
-        F.out(F.PLAN, "clarifications"): F.pick(plan, F.PLAN, "clarifications", []) or [],
+        F.out(F.PLAN, "assumptions"): assumptions,
+        F.out(F.PLAN, "clarifications"): clarifications,
     }
 
 
@@ -89,6 +144,53 @@ def _parse(raw: str):
     return None, PlanIssue("E001", "error", "输出不是合法 JSON")
 
 
+def _validate_with_contracts(plan: dict, spec: dict, template: dict) -> list[PlanIssue]:
+    """当输入为完整契约 DesignSpec 时，叠加成员 3 权威校验器以确保零契约误差。"""
+    if (
+        spec.get("schema_version") != F.SCHEMA_VERSION
+        or not spec.get("modules")
+        or not spec.get("design_items")
+        or not spec.get("constraints")
+    ):
+        return []
+    try:
+        from ..validation.validator import validate_task_plan
+    except Exception:
+        return []
+    tpl_doc = {
+        "schema_version": F.SCHEMA_VERSION,
+        "template_id": str(template.get("template_id") or "default"),
+        "version": _int(template.get("version"), 1),
+        "name": str(template.get("name") or "默认模板"),
+        "description": str(template.get("description") or "工作流模板"),
+        "stages": list(template.get("stages") or ["design", "implement", "verify", "integrate"]),
+        "allowed_roles": list(template.get("allowed_roles") or ["backend", "frontend", "qa"]),
+        "require_verification": bool(template.get("require_verification", True)),
+    }
+    report = validate_task_plan(plan, spec=spec, template=tpl_doc)
+    return [
+        PlanIssue(
+            code=i.code,
+            severity=i.severity,
+            message=i.message,
+            object_id=i.object_id,
+            field_path=i.field_path,
+        )
+        for i in report.issues
+    ]
+
+
+def _run_validation(plan: dict, spec: dict, template: dict) -> list[PlanIssue]:
+    issues = validate(plan, spec, template)
+    existing = {(i.severity, i.field_path, i.message) for i in issues}
+    for extra in _validate_with_contracts(plan, spec, template):
+        key = (extra.severity, extra.field_path, extra.message)
+        if key not in existing:
+            existing.add(key)
+            issues.append(extra)
+    return issues
+
+
 def generate(
     spec: dict,
     template: dict,
@@ -97,7 +199,11 @@ def generate(
     trace_id: str | None = None,
 ) -> GenerationResult:
     started = time.time()
-    trace = Trace(mode=provider.name, trace_id=trace_id or uuid.uuid4().hex[:12])
+    trace = Trace(
+        mode=provider.name,
+        model=str(getattr(provider, "model", "") or ""),
+        trace_id=trace_id or uuid.uuid4().hex[:12],
+    )
 
     # 1. 规格不够用就直接说，不调模型（可复现，不依赖模型心情）
     gaps = precheck(spec)
@@ -120,7 +226,7 @@ def generate(
     plan, parse_issue = _parse(raw)
     if plan is not None:
         plan = envelope(plan, spec, template, config, provider.name, trace.trace_id)
-    issues = [parse_issue] if parse_issue else validate(plan, spec, template)
+    issues = [parse_issue] if parse_issue else _run_validation(plan, spec, template)
 
     # 3. 有 error 才修复；只有 warning 直接通过
     if errors(issues):
@@ -140,7 +246,7 @@ def generate(
         plan2, parse_issue2 = _parse(raw2)
         if plan2 is not None:
             plan2 = envelope(plan2, spec, template, config, provider.name, trace.trace_id)
-        issues2 = [parse_issue2] if parse_issue2 else validate(plan2, spec, template)
+        issues2 = [parse_issue2] if parse_issue2 else _run_validation(plan2, spec, template)
 
         if errors(issues2):
             trace.latency_ms = int((time.time() - started) * 1000)

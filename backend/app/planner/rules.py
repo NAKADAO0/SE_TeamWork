@@ -176,6 +176,61 @@ def validate(plan, spec: dict, template: dict | None = None) -> list[PlanIssue]:
             if dep_id and dep_id not in ids:
                 issues.append(PlanIssue("E021", "error", f"依赖了不存在的任务 {dep_id}", tid))
 
+    # 产物唯一性与输入连接检查（对齐成员 3 TaskPlan 约束）
+    outputs_by_task: dict[str, dict[str, str]] = {}
+    seen_output_ids: dict[str, str] = {}
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        tid = str(F.pick(t, F.TASK, "id", "") or "").strip()
+        if not tid:
+            continue
+        t_outs: dict[str, str] = {}
+        for o in _list(F.pick(t, F.TASK, "outputs")):
+            if not isinstance(o, dict):
+                continue
+            oid = str(F.pick(o, F.OUTPUT_REF, "id", "") or "").strip()
+            otype = str(F.pick(o, F.OUTPUT_REF, "type", "") or "").strip()
+            if oid:
+                if oid in seen_output_ids:
+                    issues.append(PlanIssue("E025", "error", f"产物编号 {oid} 与任务 {seen_output_ids[oid]} 重复", tid, "outputs"))
+                else:
+                    seen_output_ids[oid] = tid
+                if otype and otype not in F.ARTIFACT_TYPES:
+                    issues.append(PlanIssue("E025", "error", f"产物 {oid} 类型 {otype} 不合法", tid, "outputs"))
+                t_outs[oid] = otype
+        outputs_by_task[tid] = t_outs
+
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        tid = str(F.pick(t, F.TASK, "id", "") or "").strip()
+        dep_list = deps.get(tid, [])
+        for inp in _list(F.pick(t, F.TASK, "inputs")):
+            if not isinstance(inp, dict):
+                continue
+            src = str(F.pick(inp, F.INPUT_REF, "source", "") or "")
+            ref = str(F.pick(inp, F.INPUT_REF, "ref", "") or "")
+            itype = str(F.pick(inp, F.INPUT_REF, "type", "") or "")
+            if itype not in F.ARTIFACT_TYPES:
+                issues.append(PlanIssue("E026", "error", f"输入 {ref} 类型 {itype} 不在允许范围", tid, "inputs"))
+            if src == "design":
+                if ref not in ref_ids:
+                    issues.append(PlanIssue("E019", "error", f"inputs 引用了不存在的设计条目 {ref}", tid, "inputs"))
+                elif itype != "design_contract":
+                    issues.append(PlanIssue("E026", "error", f"design 输入 {ref} 的 type 必须为 design_contract", tid, "inputs"))
+            elif src == "task_output":
+                parts = ref.split("/", 1)
+                if len(parts) != 2 or parts[0] not in outputs_by_task or parts[1] not in outputs_by_task[parts[0]]:
+                    issues.append(PlanIssue("E027", "error", f"task_output 引用 {ref} 找不到对应的任务或产物", tid, "inputs"))
+                else:
+                    prod_id, prod_out = parts
+                    prod_type = outputs_by_task[prod_id][prod_out]
+                    if prod_type and itype and prod_type != itype:
+                        issues.append(PlanIssue("E026", "error", f"输入 {ref} 类型 {itype} 与产出类型 {prod_type} 不一致", tid, "inputs"))
+                    if prod_id not in dep_list:
+                        issues.append(PlanIssue("E028", "error", f"任务 {tid} 消费了 {ref}，必须在 depends_on 中直接声明依赖 {prod_id}", tid, "depends_on"))
+
     cycle = _find_cycle(deps)
     if cycle:
         issues.append(PlanIssue("E030", "error", "任务依赖成环：" + " → ".join(cycle), "tasks"))

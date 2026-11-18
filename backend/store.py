@@ -29,15 +29,25 @@ class PlanStore:
 
     def read(self, plan_id, revision=None):
         with closing(self.connect()) as db:
-            row = db.execute("""SELECT r.revision, r.document, EXISTS(SELECT 1 FROM artifacts a WHERE a.plan_id=r.plan_id AND a.revision=r.revision AND a.kind='confirmation') FROM revisions r
+            row = db.execute("""SELECT r.revision, r.document,
+                EXISTS(SELECT 1 FROM artifacts a WHERE a.plan_id=r.plan_id AND a.revision=r.revision AND a.kind='confirmation'),
+                EXISTS(SELECT 1 FROM artifacts a WHERE a.plan_id=r.plan_id AND a.revision=r.revision AND a.kind='execution'),
+                EXISTS(SELECT 1 FROM artifacts a WHERE a.plan_id=r.plan_id AND a.revision=r.revision AND a.kind='validation')
+                FROM revisions r
                 JOIN plans p ON p.id = r.plan_id
                 WHERE p.id = ? AND r.revision = COALESCE(?, p.revision)""",
                 (plan_id, revision)).fetchone()
         if row is None:
             raise KeyError(plan_id)
         plan = json.loads(row[1])
+        plan["plan_id"] = plan_id
+        plan["revision"] = row[0]
         if row[2]:
             plan["status"] = "confirmed"
+        elif row[3]:
+            plan["status"] = "compiled"
+        elif row[4]:
+            plan["status"] = "validated"
         return {"plan_id": plan_id, "revision": row[0], "plan": plan}
 
     def append(self, plan_id, expected_revision, draft):
