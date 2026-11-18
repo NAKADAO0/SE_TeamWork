@@ -1,0 +1,394 @@
+{
+  "batches": [
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "N1"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 1
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "qa": {
+            "capacity": 2,
+            "used": 0
+          }
+        }
+      },
+      "index": 0,
+      "tasks": [
+        "N1"
+      ],
+      "waiting": [
+        {
+          "blocking_task_ids": [
+            "N1"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 N1 在本批执行）",
+          "role": "backend",
+          "task_id": "N2"
+        },
+        {
+          "blocking_task_ids": [
+            "N1"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 N1 在本批执行）",
+          "role": "frontend",
+          "task_id": "N3"
+        },
+        {
+          "blocking_task_ids": [
+            "N1"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 N1 在本批执行）",
+          "role": "backend",
+          "task_id": "N4"
+        },
+        {
+          "blocking_task_ids": [
+            "N2",
+            "N3"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 N2（需要可读取的发布结果）、N3（沿用发布页面的编辑状态）",
+          "role": "frontend",
+          "task_id": "N5"
+        },
+        {
+          "blocking_task_ids": [
+            "N4",
+            "N5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 N4（需要幂等点赞接口）、N5（需要可操作的内容流页面）",
+          "role": "qa",
+          "task_id": "N6"
+        },
+        {
+          "blocking_task_ids": [
+            "N5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 N5（需要可回读的内容流页面）",
+          "role": "qa",
+          "task_id": "N7"
+        },
+        {
+          "blocking_task_ids": [
+            "N6",
+            "N7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 N6（需要点赞幂等验证结论）、N7（需要图文发布验证结论）",
+          "role": "qa",
+          "task_id": "N8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "N2"
+        },
+        {
+          "global_slot": 2,
+          "role_slot": 1,
+          "task_id": "N3"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 2
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "qa": {
+            "capacity": 2,
+            "used": 0
+          }
+        }
+      },
+      "index": 1,
+      "tasks": [
+        "N2",
+        "N3"
+      ],
+      "waiting": [
+        {
+          "capacity": 2,
+          "code": "WAIT_GLOBAL_CAPACITY",
+          "in_use": 2,
+          "message": "全局并发已满（2/2），本批已排入 N2、N3",
+          "role": "backend",
+          "task_id": "N4"
+        },
+        {
+          "blocking_task_ids": [
+            "N2",
+            "N3"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 N2、N3 在本批执行）",
+          "role": "frontend",
+          "task_id": "N5"
+        },
+        {
+          "blocking_task_ids": [
+            "N4",
+            "N5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 N4（需要幂等点赞接口）、N5（需要可操作的内容流页面）",
+          "role": "qa",
+          "task_id": "N6"
+        },
+        {
+          "blocking_task_ids": [
+            "N5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 N5（需要可回读的内容流页面）",
+          "role": "qa",
+          "task_id": "N7"
+        },
+        {
+          "blocking_task_ids": [
+            "N6",
+            "N7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 N6（需要点赞幂等验证结论）、N7（需要图文发布验证结论）",
+          "role": "qa",
+          "task_id": "N8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "N4"
+        },
+        {
+          "global_slot": 2,
+          "role_slot": 1,
+          "task_id": "N5"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 2
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "qa": {
+            "capacity": 2,
+            "used": 0
+          }
+        }
+      },
+      "index": 2,
+      "tasks": [
+        "N4",
+        "N5"
+      ],
+      "waiting": [
+        {
+          "blocking_task_ids": [
+            "N4",
+            "N5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 N4、N5 在本批执行）",
+          "role": "qa",
+          "task_id": "N6"
+        },
+        {
+          "blocking_task_ids": [
+            "N5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 N5 在本批执行）",
+          "role": "qa",
+          "task_id": "N7"
+        },
+        {
+          "blocking_task_ids": [
+            "N6",
+            "N7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 N6（需要点赞幂等验证结论）、N7（需要图文发布验证结论）",
+          "role": "qa",
+          "task_id": "N8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "N6"
+        },
+        {
+          "global_slot": 2,
+          "role_slot": 2,
+          "task_id": "N7"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 2
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "qa": {
+            "capacity": 2,
+            "used": 2
+          }
+        }
+      },
+      "index": 3,
+      "tasks": [
+        "N6",
+        "N7"
+      ],
+      "waiting": [
+        {
+          "blocking_task_ids": [
+            "N6",
+            "N7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 N6、N7 在本批执行）",
+          "role": "qa",
+          "task_id": "N8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "N8"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 1
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "qa": {
+            "capacity": 2,
+            "used": 1
+          }
+        }
+      },
+      "index": 4,
+      "tasks": [
+        "N8"
+      ],
+      "waiting": []
+    }
+  ],
+  "blocked": false,
+  "config": {
+    "max_concurrency": 2,
+    "ordering": [
+      "priority",
+      "task_id"
+    ],
+    "role_capacity": {
+      "backend": 1,
+      "frontend": 1,
+      "qa": 2
+    }
+  },
+  "execution_plan_id": "EXEC-COMMUNITY",
+  "plan_ref": {
+    "plan_id": "PLAN-COMMUNITY",
+    "revision": 1
+  },
+  "schema_version": "1.0",
+  "summary": {
+    "batches": 5,
+    "largest_batch": 2,
+    "tasks": 8,
+    "topological_levels": 5,
+    "wait_reasons": 16
+  },
+  "topological_levels": [
+    [
+      "N1"
+    ],
+    [
+      "N2",
+      "N3",
+      "N4"
+    ],
+    [
+      "N5"
+    ],
+    [
+      "N6",
+      "N7"
+    ],
+    [
+      "N8"
+    ]
+  ]
+}

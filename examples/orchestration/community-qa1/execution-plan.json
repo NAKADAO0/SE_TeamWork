@@ -1,0 +1,192 @@
+{
+  "batches": [
+    [
+      "N1"
+    ],
+    [
+      "N2",
+      "N3"
+    ],
+    [
+      "N4",
+      "N5"
+    ],
+    [
+      "N6"
+    ],
+    [
+      "N7"
+    ],
+    [
+      "N8"
+    ]
+  ],
+  "bindings": [
+    {
+      "global_slot": 1,
+      "role_slot": 1,
+      "task_id": "N1"
+    },
+    {
+      "global_slot": 1,
+      "role_slot": 1,
+      "task_id": "N2"
+    },
+    {
+      "global_slot": 2,
+      "role_slot": 1,
+      "task_id": "N3"
+    },
+    {
+      "global_slot": 1,
+      "role_slot": 1,
+      "task_id": "N4"
+    },
+    {
+      "global_slot": 2,
+      "role_slot": 1,
+      "task_id": "N5"
+    },
+    {
+      "global_slot": 1,
+      "role_slot": 1,
+      "task_id": "N6"
+    },
+    {
+      "global_slot": 1,
+      "role_slot": 1,
+      "task_id": "N7"
+    },
+    {
+      "global_slot": 1,
+      "role_slot": 1,
+      "task_id": "N8"
+    }
+  ],
+  "config_digest": "db1e3b8fc5a91d19a377738594a77c922f4a7411fc41749708f02b003b33eaef",
+  "edges": [
+    {
+      "from_task": "N1",
+      "to_task": "N2"
+    },
+    {
+      "from_task": "N1",
+      "to_task": "N3"
+    },
+    {
+      "from_task": "N1",
+      "to_task": "N4"
+    },
+    {
+      "from_task": "N2",
+      "to_task": "N5"
+    },
+    {
+      "from_task": "N3",
+      "to_task": "N5"
+    },
+    {
+      "from_task": "N4",
+      "to_task": "N6"
+    },
+    {
+      "from_task": "N5",
+      "to_task": "N6"
+    },
+    {
+      "from_task": "N5",
+      "to_task": "N7"
+    },
+    {
+      "from_task": "N6",
+      "to_task": "N8"
+    },
+    {
+      "from_task": "N7",
+      "to_task": "N8"
+    }
+  ],
+  "execution_plan_id": "EXEC-COMMUNITY-QA1",
+  "nodes": [
+    {
+      "priority": 1,
+      "role": "backend",
+      "stage": "implement",
+      "task_id": "N1"
+    },
+    {
+      "priority": 1,
+      "role": "backend",
+      "stage": "implement",
+      "task_id": "N2"
+    },
+    {
+      "priority": 1,
+      "role": "frontend",
+      "stage": "implement",
+      "task_id": "N3"
+    },
+    {
+      "priority": 1,
+      "role": "backend",
+      "stage": "implement",
+      "task_id": "N4"
+    },
+    {
+      "priority": 1,
+      "role": "frontend",
+      "stage": "implement",
+      "task_id": "N5"
+    },
+    {
+      "priority": 1,
+      "role": "qa",
+      "stage": "verify",
+      "task_id": "N6"
+    },
+    {
+      "priority": 1,
+      "role": "qa",
+      "stage": "verify",
+      "task_id": "N7"
+    },
+    {
+      "priority": 2,
+      "role": "qa",
+      "stage": "integrate",
+      "task_id": "N8"
+    }
+  ],
+  "plan_ref": {
+    "plan_id": "PLAN-COMMUNITY",
+    "revision": 1
+  },
+  "schema_version": "1.0",
+  "spec_digest": "45feb5e95cb8a0f2d5f262d0da09370322e568d1fa6c183d004ad120b2c4a789",
+  "template_digest": "3c2b23cc0bf0b97d71344c3255629f70256d51614edb5357892de9a1e72799e0",
+  "topological_levels": [
+    [
+      "N1"
+    ],
+    [
+      "N2",
+      "N3",
+      "N4"
+    ],
+    [
+      "N5"
+    ],
+    [
+      "N6",
+      "N7"
+    ],
+    [
+      "N8"
+    ]
+  ],
+  "validation_ref": {
+    "plan_id": "PLAN-COMMUNITY",
+    "report_digest": "248589a0ea4b0398120b6131a4a5898bb9f311c6989355f39e124f80d85bfe38",
+    "revision": 1
+  }
+}

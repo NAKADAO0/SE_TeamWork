@@ -1,0 +1,445 @@
+{
+  "batches": [
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "C1"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 1
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "qa": {
+            "capacity": 1,
+            "used": 0
+          }
+        }
+      },
+      "index": 0,
+      "tasks": [
+        "C1"
+      ],
+      "waiting": [
+        {
+          "blocking_task_ids": [
+            "C1"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 C1 在本批执行）",
+          "role": "backend",
+          "task_id": "C2"
+        },
+        {
+          "blocking_task_ids": [
+            "C1"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 C1 在本批执行）",
+          "role": "frontend",
+          "task_id": "C3"
+        },
+        {
+          "blocking_task_ids": [
+            "C2"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C2（复用消息查询服务与鉴权）",
+          "role": "backend",
+          "task_id": "C4"
+        },
+        {
+          "blocking_task_ids": [
+            "C3",
+            "C4"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C3（沿用会话页面状态管理）、C4（需要游标分页接口）",
+          "role": "frontend",
+          "task_id": "C5"
+        },
+        {
+          "blocking_task_ids": [
+            "C2",
+            "C3"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C2（需要可调用的消息服务）、C3（需要可操作的发送界面）",
+          "role": "qa",
+          "task_id": "C6"
+        },
+        {
+          "blocking_task_ids": [
+            "C4",
+            "C5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C4（需要分页接口）、C5（需要可操作的加载更多界面）",
+          "role": "qa",
+          "task_id": "C7"
+        },
+        {
+          "blocking_task_ids": [
+            "C6",
+            "C7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C6（需要发送与会话隔离验证结论）、C7（需要分页边界验证结论）",
+          "role": "qa",
+          "task_id": "C8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "C2"
+        },
+        {
+          "global_slot": 2,
+          "role_slot": 1,
+          "task_id": "C3"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 2
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "qa": {
+            "capacity": 1,
+            "used": 0
+          }
+        }
+      },
+      "index": 1,
+      "tasks": [
+        "C2",
+        "C3"
+      ],
+      "waiting": [
+        {
+          "blocking_task_ids": [
+            "C2"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 C2 在本批执行）",
+          "role": "backend",
+          "task_id": "C4"
+        },
+        {
+          "blocking_task_ids": [
+            "C3",
+            "C4"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C4（需要游标分页接口）；另有 C3 在本批执行",
+          "role": "frontend",
+          "task_id": "C5"
+        },
+        {
+          "blocking_task_ids": [
+            "C2",
+            "C3"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 C2、C3 在本批执行）",
+          "role": "qa",
+          "task_id": "C6"
+        },
+        {
+          "blocking_task_ids": [
+            "C4",
+            "C5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C4（需要分页接口）、C5（需要可操作的加载更多界面）",
+          "role": "qa",
+          "task_id": "C7"
+        },
+        {
+          "blocking_task_ids": [
+            "C6",
+            "C7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C6（需要发送与会话隔离验证结论）、C7（需要分页边界验证结论）",
+          "role": "qa",
+          "task_id": "C8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "C4"
+        },
+        {
+          "global_slot": 2,
+          "role_slot": 1,
+          "task_id": "C6"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 2
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "qa": {
+            "capacity": 1,
+            "used": 1
+          }
+        }
+      },
+      "index": 2,
+      "tasks": [
+        "C4",
+        "C6"
+      ],
+      "waiting": [
+        {
+          "blocking_task_ids": [
+            "C4"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 C4 在本批执行）",
+          "role": "frontend",
+          "task_id": "C5"
+        },
+        {
+          "blocking_task_ids": [
+            "C4",
+            "C5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C5（需要可操作的加载更多界面）；另有 C4 在本批执行",
+          "role": "qa",
+          "task_id": "C7"
+        },
+        {
+          "blocking_task_ids": [
+            "C6",
+            "C7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C7（需要分页边界验证结论）；另有 C6 在本批执行",
+          "role": "qa",
+          "task_id": "C8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "C5"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 1
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 1
+          },
+          "qa": {
+            "capacity": 1,
+            "used": 0
+          }
+        }
+      },
+      "index": 3,
+      "tasks": [
+        "C5"
+      ],
+      "waiting": [
+        {
+          "blocking_task_ids": [
+            "C5"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 C5 在本批执行）",
+          "role": "qa",
+          "task_id": "C7"
+        },
+        {
+          "blocking_task_ids": [
+            "C7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "等待前置任务 C7（需要分页边界验证结论）",
+          "role": "qa",
+          "task_id": "C8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "C7"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 1
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "qa": {
+            "capacity": 1,
+            "used": 1
+          }
+        }
+      },
+      "index": 4,
+      "tasks": [
+        "C7"
+      ],
+      "waiting": [
+        {
+          "blocking_task_ids": [
+            "C7"
+          ],
+          "code": "WAIT_DEPENDENCY",
+          "message": "本批完成后可排入（前置 C7 在本批执行）",
+          "role": "qa",
+          "task_id": "C8"
+        }
+      ]
+    },
+    {
+      "bindings": [
+        {
+          "global_slot": 1,
+          "role_slot": 1,
+          "task_id": "C8"
+        }
+      ],
+      "capacity": {
+        "global": {
+          "capacity": 2,
+          "used": 1
+        },
+        "roles": {
+          "backend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "frontend": {
+            "capacity": 1,
+            "used": 0
+          },
+          "qa": {
+            "capacity": 1,
+            "used": 1
+          }
+        }
+      },
+      "index": 5,
+      "tasks": [
+        "C8"
+      ],
+      "waiting": []
+    }
+  ],
+  "blocked": false,
+  "config": {
+    "max_concurrency": 2,
+    "ordering": [
+      "priority",
+      "task_id"
+    ],
+    "role_capacity": {
+      "backend": 1,
+      "frontend": 1,
+      "qa": 1
+    }
+  },
+  "execution_plan_id": "EXEC-CHAT",
+  "plan_ref": {
+    "plan_id": "PLAN-CHAT",
+    "revision": 1
+  },
+  "schema_version": "1.0",
+  "summary": {
+    "batches": 6,
+    "largest_batch": 2,
+    "tasks": 8,
+    "topological_levels": 6,
+    "wait_reasons": 18
+  },
+  "topological_levels": [
+    [
+      "C1"
+    ],
+    [
+      "C2",
+      "C3"
+    ],
+    [
+      "C4",
+      "C6"
+    ],
+    [
+      "C5"
+    ],
+    [
+      "C7"
+    ],
+    [
+      "C8"
+    ]
+  ]
+}
