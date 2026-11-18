@@ -1,6 +1,24 @@
 # SE_TeamWork
 软件工程与项目实践_TeamWork
 
+## 完整端到端原型运行（推荐）
+
+系统已打通「设计规格输入（JSON / Markdown）→ 缺口检查与规格确认 → PM Agent / 结构化规则任务分解 → 契约与图校验 → 确定性资源编排 → 交互式工作台与 DAG 图谱可视化 → 修订控制与计划包导出」全链路：
+
+```sh
+python -m pip install -r backend/requirements.txt
+# 可选：复制 .env.example 为 .env 并填入 PM_BASE_URL / PM_API_KEY / PM_MODEL 以启用实时 PM Agent
+python -m backend
+```
+
+启动后直接打开 http://127.0.0.1:8010/ （或直接进入工作台 http://127.0.0.1:8010/frontend/ ）：
+- **输入规格**：内置「聊天 MVP」「内容社区 MVP」「校园失物招领 MVP（Markdown 现场规格）」，也支持粘贴或导入任意自定义产品的 `.json` / `.md` 设计规格。
+- **工作台生成方式**：使用实时 PM Agent。启动前配置 PM_BASE_URL、PM_API_KEY、PM_MODEL。
+- **验证全部测试**：
+  - `python -m unittest discover -s tests -p "test_*.py" -v`（API、持久化与端到端全链路测试）
+  - `python -m unittest discover -s backend/tests -t . -v`（契约、校验器、PM 规划与编排器单元测试）
+  - `npm test`（前端状态机、缺口检查、依赖连线、排批与视图测试）
+
 ## Lab2 离线演示
 
 在仓库根目录运行 `python -m http.server 8000 --bind 127.0.0.1`，打开 http://127.0.0.1:8000/ 。选择产品，编辑需求与验收条件，生成计划。把并发从 2 改成 1 后重新生成，可比较批次数并导出 JSON。用 Node 22 运行 `node --test tests/demo.test.mjs` 检查核心规则。
