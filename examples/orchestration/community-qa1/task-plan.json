@@ -1,0 +1,516 @@
+{
+  "assumptions": [
+    "图片先上传为既有静态资源，笔记只保存图片引用",
+    "点赞计数在读取笔记时实时汇总"
+  ],
+  "clarifications": [],
+  "config": {
+    "max_concurrency": 2,
+    "ordering": [
+      "priority",
+      "task_id"
+    ],
+    "role_capacity": {
+      "backend": 1,
+      "frontend": 1,
+      "qa": 1
+    }
+  },
+  "generation_mode": "curated_example",
+  "plan_id": "PLAN-COMMUNITY",
+  "revision": 1,
+  "schema_version": "1.0",
+  "spec_ref": {
+    "spec_id": "SPEC-COMMUNITY",
+    "version": 1
+  },
+  "tasks": [
+    {
+      "acceptance": [
+        "正文与图片引用按同一契约读取",
+        "无效媒体的拒绝规则写入契约"
+      ],
+      "depends_on": [],
+      "description": "确认笔记实体、发布接口与媒体校验规则，作为前后端共同实现的输入。",
+      "design_refs": [
+        "I-NOTE-ENTITY",
+        "I-NOTE-API",
+        "I-MEDIA-RULE"
+      ],
+      "estimated_effort": {
+        "basis": "笔记实体、发布接口与媒体规则确认",
+        "unit": "人时",
+        "value": 2
+      },
+      "id": "N1",
+      "inputs": [
+        {
+          "ref": "I-NOTE-ENTITY",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-NOTE-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-MEDIA-RULE",
+          "source": "design",
+          "type": "design_contract"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-NOTE"
+      ],
+      "outputs": [
+        {
+          "description": "笔记实体、发布接口与媒体校验规则契约",
+          "id": "O-NOTE-CONTRACT",
+          "type": "design_contract"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "backend",
+      "stage": "implement",
+      "title": "定义笔记与媒体契约"
+    },
+    {
+      "acceptance": [
+        "无效图片拒绝发布并返回原因",
+        "成功笔记返回可读取的笔记 ID"
+      ],
+      "depends_on": [
+        {
+          "reason": "媒体规则与笔记字段需要先由契约确认",
+          "task_id": "N1"
+        }
+      ],
+      "description": "按契约校验图片类型与数量，发布成功后返回可读取的笔记 ID。",
+      "design_refs": [
+        "I-NOTE-API",
+        "I-MEDIA-RULE"
+      ],
+      "estimated_effort": {
+        "basis": "媒体校验、笔记写入与发布响应",
+        "unit": "人时",
+        "value": 4
+      },
+      "id": "N2",
+      "inputs": [
+        {
+          "ref": "I-NOTE-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-MEDIA-RULE",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "N1/O-NOTE-CONTRACT",
+          "source": "task_output",
+          "type": "design_contract"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-NOTE"
+      ],
+      "outputs": [
+        {
+          "description": "媒体校验与笔记发布接口",
+          "id": "O-PUBLISH-API",
+          "type": "implementation"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "backend",
+      "stage": "implement",
+      "title": "实现媒体检查与笔记发布"
+    },
+    {
+      "acceptance": [
+        "预览顺序与提交的图片顺序一致",
+        "发布失败保留编辑内容"
+      ],
+      "depends_on": [
+        {
+          "reason": "发布字段与错误提示需要按契约实现",
+          "task_id": "N1"
+        }
+      ],
+      "description": "实现图文编辑、图片顺序预览与发布失败保留内容的界面。",
+      "design_refs": [
+        "P-COMMUNITY-PAGE",
+        "I-NOTE-API"
+      ],
+      "estimated_effort": {
+        "basis": "图文编辑、图片预览与失败恢复",
+        "unit": "人时",
+        "value": 3
+      },
+      "id": "N3",
+      "inputs": [
+        {
+          "ref": "P-COMMUNITY-PAGE",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "N1/O-NOTE-CONTRACT",
+          "source": "task_output",
+          "type": "design_contract"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-COMMUNITY-UI"
+      ],
+      "outputs": [
+        {
+          "description": "图文编辑与预览界面",
+          "id": "O-PUBLISH-PAGE",
+          "type": "implementation"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "frontend",
+      "stage": "implement",
+      "title": "开发图文编辑与预览"
+    },
+    {
+      "acceptance": [
+        "重复请求后同一用户只有一条点赞记录"
+      ],
+      "depends_on": [
+        {
+          "reason": "点赞对象需要引用已确认的笔记标识",
+          "task_id": "N1"
+        }
+      ],
+      "description": "实现点赞接口与唯一约束，重复请求不重复计数。",
+      "design_refs": [
+        "I-LIKE-API",
+        "I-LIKE-RULE"
+      ],
+      "estimated_effort": {
+        "basis": "点赞写入与唯一约束",
+        "unit": "人时",
+        "value": 3
+      },
+      "id": "N4",
+      "inputs": [
+        {
+          "ref": "I-LIKE-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-LIKE-RULE",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "N1/O-NOTE-CONTRACT",
+          "source": "task_output",
+          "type": "design_contract"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-LIKE"
+      ],
+      "outputs": [
+        {
+          "description": "幂等点赞接口",
+          "id": "O-LIKE-API",
+          "type": "implementation"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R2"
+      ],
+      "role": "backend",
+      "stage": "implement",
+      "title": "建立点赞唯一约束"
+    },
+    {
+      "acceptance": [
+        "新笔记在刷新后展示正确正文和图片",
+        "内容流按发布时间倒序"
+      ],
+      "depends_on": [
+        {
+          "reason": "需要可读取的发布结果",
+          "task_id": "N2"
+        },
+        {
+          "reason": "沿用发布页面的编辑状态",
+          "task_id": "N3"
+        }
+      ],
+      "description": "把发布接口接入社区页，刷新后按时间倒序展示新笔记。",
+      "design_refs": [
+        "I-FEED-API",
+        "P-COMMUNITY-PAGE"
+      ],
+      "estimated_effort": {
+        "basis": "内容流渲染与发布结果回读",
+        "unit": "人时",
+        "value": 3
+      },
+      "id": "N5",
+      "inputs": [
+        {
+          "ref": "I-FEED-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "P-COMMUNITY-PAGE",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "N2/O-PUBLISH-API",
+          "source": "task_output",
+          "type": "implementation"
+        },
+        {
+          "ref": "N3/O-PUBLISH-PAGE",
+          "source": "task_output",
+          "type": "implementation"
+        }
+      ],
+      "kind": "implementation",
+      "module_ids": [
+        "M-FEED",
+        "M-COMMUNITY-UI"
+      ],
+      "outputs": [
+        {
+          "description": "发布后的内容流页面",
+          "id": "O-FEED-PAGE",
+          "type": "implementation"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "frontend",
+      "stage": "implement",
+      "title": "接入发布后的内容流"
+    },
+    {
+      "acceptance": [
+        "连续点击和刷新后点赞数只增加一次",
+        "另一账号点赞后计数正确"
+      ],
+      "depends_on": [
+        {
+          "reason": "需要幂等点赞接口",
+          "task_id": "N4"
+        },
+        {
+          "reason": "需要可操作的内容流页面",
+          "task_id": "N5"
+        }
+      ],
+      "description": "在内容流接入点赞按钮，验证重复点击与刷新后的计数一致性。",
+      "design_refs": [
+        "I-LIKE-API",
+        "I-FEED-API"
+      ],
+      "estimated_effort": {
+        "basis": "点赞交互与幂等复验",
+        "unit": "人时",
+        "value": 2
+      },
+      "id": "N6",
+      "inputs": [
+        {
+          "ref": "I-LIKE-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-FEED-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "N4/O-LIKE-API",
+          "source": "task_output",
+          "type": "implementation"
+        },
+        {
+          "ref": "N5/O-FEED-PAGE",
+          "source": "task_output",
+          "type": "implementation"
+        }
+      ],
+      "kind": "verification",
+      "module_ids": [
+        "M-LIKE",
+        "M-COMMUNITY-UI"
+      ],
+      "outputs": [
+        {
+          "description": "点赞交互与幂等验证报告",
+          "id": "O-LIKE-VERIFY",
+          "type": "verification_report"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R2"
+      ],
+      "role": "qa",
+      "stage": "verify",
+      "title": "接入点赞交互并复验"
+    },
+    {
+      "acceptance": [
+        "成功笔记可读，无效媒体不产生笔记",
+        "正文与图片引用一致"
+      ],
+      "depends_on": [
+        {
+          "reason": "需要可回读的内容流页面",
+          "task_id": "N5"
+        }
+      ],
+      "description": "验证有效笔记可回读、无效媒体不产生笔记且正文与图片引用一致。",
+      "design_refs": [
+        "I-NOTE-API",
+        "I-FEED-API"
+      ],
+      "estimated_effort": {
+        "basis": "发布校验与回读用例",
+        "unit": "人时",
+        "value": 2
+      },
+      "id": "N7",
+      "inputs": [
+        {
+          "ref": "I-NOTE-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "N5/O-FEED-PAGE",
+          "source": "task_output",
+          "type": "implementation"
+        }
+      ],
+      "kind": "verification",
+      "module_ids": [
+        "M-NOTE",
+        "M-FEED"
+      ],
+      "outputs": [
+        {
+          "description": "图文发布与回读验证报告",
+          "id": "O-NOTE-VERIFY",
+          "type": "verification_report"
+        }
+      ],
+      "priority": 1,
+      "requirement_ids": [
+        "R1"
+      ],
+      "role": "qa",
+      "stage": "verify",
+      "title": "验证图文发布与回读"
+    },
+    {
+      "acceptance": [
+        "另一账号可读取笔记并点赞，作者查看计数一致"
+      ],
+      "depends_on": [
+        {
+          "reason": "需要点赞幂等验证结论",
+          "task_id": "N6"
+        },
+        {
+          "reason": "需要图文发布验证结论",
+          "task_id": "N7"
+        }
+      ],
+      "description": "串联发布、内容流、点赞与跨账号查看，确认计数与内容一致。",
+      "design_refs": [
+        "I-NOTE-API",
+        "I-FEED-API",
+        "I-LIKE-API"
+      ],
+      "estimated_effort": {
+        "basis": "跨账号端到端场景",
+        "unit": "人时",
+        "value": 2
+      },
+      "id": "N8",
+      "inputs": [
+        {
+          "ref": "I-NOTE-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "I-FEED-API",
+          "source": "design",
+          "type": "design_contract"
+        },
+        {
+          "ref": "N6/O-LIKE-VERIFY",
+          "source": "task_output",
+          "type": "verification_report"
+        },
+        {
+          "ref": "N7/O-NOTE-VERIFY",
+          "source": "task_output",
+          "type": "verification_report"
+        }
+      ],
+      "kind": "integration",
+      "module_ids": [
+        "M-NOTE",
+        "M-FEED",
+        "M-LIKE",
+        "M-COMMUNITY-UI"
+      ],
+      "outputs": [
+        {
+          "description": "发布到互动全流程端到端验收清单",
+          "id": "O-E2E-CHECK",
+          "type": "integration_report"
+        }
+      ],
+      "priority": 2,
+      "requirement_ids": [
+        "R1",
+        "R2"
+      ],
+      "role": "qa",
+      "stage": "integrate",
+      "title": "验收发布到互动全流程"
+    }
+  ],
+  "template_ref": {
+    "template_id": "TPL-DEFAULT",
+    "version": 1
+  }
+}
