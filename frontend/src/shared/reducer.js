@@ -33,9 +33,11 @@ export function initialState() {
     spec: null,
     specIssues: null,
     templateId: "default",
+    generationMode: "live_llm",
     config: { max_concurrency: 2, role_capacity: { backend: 1, frontend: 1, qa: 1 } },
     job: null,
     plan: null,
+    persistedRevision: null,
     history: [],
     validation: null,
     execution: null,
@@ -123,17 +125,21 @@ export function reduce(state, action) {
       };
     }
 
+    case "MODE_CHANGED":
+      return { ...state, generationMode: action.mode };
+
     case "SPEC_LOADED": {
       const draft = action.draft;
+      const productName = typeof draft?.product === "string" ? draft.product : draft?.product?.name;
       return {
         ...state,
-        specText: JSON.stringify(draft, null, 2),
+        specText: action.text ?? JSON.stringify(draft, null, 2),
         specToken: state.specToken + 1,
         spec: { draft, locked: false, ref: null, source: action.source ?? "" },
         specIssues: null,
         phase: PHASE.SPEC_DRAFT,
         stale: Boolean(state.plan),
-        message: message("info", `已载入规格样例：${draft?.product?.name ?? "未命名"}`),
+        message: message("info", `已载入规格：${productName || "未命名产品"}`),
       };
     }
 
@@ -171,21 +177,30 @@ export function reduce(state, action) {
     case "JOB_UPDATED": {
       const job = action.job;
       if (job.status === "needs_clarification") {
+        const gaps = (job.gaps ?? []).map((g) => ({
+          severity: "error",
+          code: g.code ?? "GAP",
+          field_path: g.field_path ?? "",
+          message: g.message ?? "",
+        }));
         return {
           ...state,
           busy: false,
           job,
+          spec: state.spec ? { ...state.spec, locked: false } : state.spec,
+          specIssues: gaps.length ? { errors: gaps, warnings: [] } : state.specIssues,
           phase: PHASE.SPEC_DRAFT,
-          message: message("warn", "规格存在关键缺口，请补充后重新提交"),
+          message: message("warn", job.error?.message ?? "规格存在关键缺口，请补充后重新提交"),
         };
       }
       if (job.status === "failed" || job.status === "invalid_output") {
+        const detail = (job.issues ?? []).slice(0, 3).map((i) => `${i.code}: ${i.message}`).join("；");
         return {
           ...state,
           busy: false,
           job,
           phase: state.spec?.locked ? PHASE.SPEC_CONFIRMED : PHASE.SPEC_DRAFT,
-          message: message("error", job.error?.message ?? `规划作业失败：${job.status}`),
+          message: message("error", [job.error?.message ?? `规划作业失败：${job.status}`, detail].filter(Boolean).join(" — ")),
         };
       }
       return { ...state, job };
@@ -197,6 +212,7 @@ export function reduce(state, action) {
       return {
         ...state,
         plan,
+        persistedRevision: plan?.revision ?? 1,
         busy: false,
         job: state.job ? { ...state.job, status: "succeeded" } : null,
         history: [snapshot(plan, PHASE.PLAN_DRAFT)],
@@ -206,6 +222,19 @@ export function reduce(state, action) {
         stale: false,
         selectedTaskId: plan?.tasks?.[0]?.id ?? null,
         message: message("info", `已载入计划 ${plan.plan_id} 修订 ${plan.revision}`),
+      };
+    }
+
+    case "PLAN_SYNCED": {
+      if (!state.plan) return state;
+      const revision = action.revision ?? state.plan.revision;
+      const syncedPlan = { ...state.plan, revision };
+      return {
+        ...state,
+        plan: syncedPlan,
+        persistedRevision: revision,
+        history: pushHistory(state.history.filter((h) => h.revision !== state.plan.revision || h.revision === revision), syncedPlan, state.phase),
+        message: action.silent ? state.message : message("info", `已保存修订 r${revision} 到数据库`),
       };
     }
 

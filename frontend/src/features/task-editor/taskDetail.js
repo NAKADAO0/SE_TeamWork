@@ -120,6 +120,11 @@ export function mountTaskDetail(root, { store, actions }) {
         )}</p>
         <p class="ws-meta">需求：${escapeHtml((task.requirement_ids ?? []).join("、") || "未关联")} ｜ 模块：${escapeHtml(
           (task.module_ids ?? []).join("、") || "未关联",
+        )} ｜ 设计引用：${escapeHtml((task.design_refs ?? []).join("、") || "无")}</p>
+        <p class="ws-meta">类型：${escapeHtml(task.kind ?? "implementation")} ｜ 估算：${escapeHtml(
+          task.estimated_effort
+            ? `${task.estimated_effort.value} ${task.estimated_effort.unit}${task.estimated_effort.basis ? `（${task.estimated_effort.basis}）` : ""}`
+            : "未估算",
         )}</p>
         <div class="ws-row">
           <button type="button" data-action="delete" class="danger">删除任务</button>

@@ -8,31 +8,53 @@ import { mountTaskTable } from "./features/task-editor/taskTable.js";
 import { mountGraph } from "./features/workflow-graph/graphCanvas.js";
 import { canLink } from "./features/workflow-graph/canvasLinking.js";
 import { mountSpecEditor } from "./features/spec-editor/specEditor.js";
+import { parseSpecMarkdownClient } from "./features/spec-editor/gapCheck.js";
 
 const params = new URLSearchParams(location.search);
-const api = createApi({ mode: params.get("api") === "http" ? "http" : "fixture", base: "." });
+let api = createApi({ mode: "fixture", base: "." });
 const store = createStore(initialState(), reduce);
 
 let templates = [];
+let liveLlmConfigured = false;
 
 const phaseEl = document.querySelector('[data-role="phase"]');
 const refsEl = document.querySelector('[data-role="refs"]');
 const messageEl = document.querySelector('[data-role="message"]');
 const versionsEl = document.querySelector('[data-role="versions"]');
+const stages = [...document.querySelectorAll("[data-stage]")];
+const panels = [...document.querySelectorAll("[data-stage-panel]")];
+let stage = "spec";
+
+function showStage(next) {
+  stage = next;
+  for (const button of stages) {
+    if (button.dataset.stage === next) button.setAttribute("aria-current", "step");
+    else button.removeAttribute("aria-current");
+  }
+  for (const panel of panels) panel.hidden = panel.dataset.stagePanel !== next;
+}
+
+for (const button of stages) {
+  button.addEventListener("click", () => showStage(button.dataset.stage));
+}
+const graphLink = document.querySelector('[data-action="open-graph"]');
 const buttons = {
+  workflow: document.querySelector('[data-action="run-workflow"]'),
+  save: document.querySelector('[data-action="save"]'),
   validate: document.querySelector('[data-action="validate"]'),
   compile: document.querySelector('[data-action="compile"]'),
   confirm: document.querySelector('[data-action="confirm"]'),
   export: document.querySelector('[data-action="export"]'),
+  exportMd: document.querySelector('[data-action="export-md"]'),
 };
 
 const actions = {
   loadSample,
+  importSpecText,
   checkSpec,
   confirmSpec,
   startPlanning,
   setTemplate,
-  setConfig,
   patchTask,
   addTask,
   deleteTask,
@@ -51,10 +73,13 @@ const views = {
 document.body.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");
   if (!target) return;
+  if (target === buttons.workflow) startPlanning(true);
+  if (target === buttons.save) runSave();
   if (target === buttons.validate) runValidation();
   if (target === buttons.compile) runCompile();
   if (target === buttons.confirm) runConfirm();
-  if (target === buttons.export) runExport();
+  if (target === buttons.export) runExport("json");
+  if (target === buttons.exportMd) runExport("markdown");
 });
 
 /* ---------- 状态与提示 ---------- */
@@ -69,36 +94,76 @@ function fail(error) {
   store.dispatch({ type: "ERROR", message: text });
 }
 
-function currentDraft() {
-  try {
-    return JSON.parse(store.getState().specText);
-  } catch (error) {
-    fail(new Error(`规格不是合法 JSON：${error.message}`));
+function parseSpecInput() {
+  const raw = store.getState().specText ?? "";
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    fail(new Error("设计规格不能为空，请导入或输入 JSON / Markdown 规格"));
     return null;
   }
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        fail(new Error("设计规格 JSON 必须是对象"));
+        return null;
+      }
+      return { draft: parsed, text: null, parsedPreview: parsed };
+    } catch (error) {
+      fail(new Error(`规格不是合法 JSON：${error.message}`));
+      return null;
+    }
+  }
+  return { draft: null, text: raw, parsedPreview: parseSpecMarkdownClient(raw) };
 }
 
 /* ---------- 规格 ---------- */
 
 async function loadSample(name) {
-  if (name !== "chat") {
-    notice("warn", "内容社区样例尚未接入，先使用聊天 MVP 验证流程");
-    return;
-  }
+  const state = store.getState();
+  if (state.busy || state.spec?.locked) return;
+  if (state.specText.trim() && !window.confirm("用这份样例替换当前说明书？")) return;
   try {
-    const draft = await api.loadSpecSample();
-    store.dispatch({ type: "SPEC_LOADED", draft, source: name });
+    const sample = await api.loadSpecSample(name);
+    const current = store.getState();
+    if (current.spec?.locked || current.busy || current.specText !== state.specText) return;
+    store.dispatch({ type: "SPEC_LOADED", draft: sample.draft, text: sample.text, source: name });
   } catch (error) {
     fail(error);
   }
 }
 
+function importSpecText(content, filename = "") {
+  const trimmed = String(content ?? "").trim();
+  if (!trimmed) {
+    notice("error", "导入文件为空");
+    return;
+  }
+  if (trimmed.startsWith("{")) {
+    try {
+      const draft = JSON.parse(trimmed);
+      store.dispatch({ type: "SPEC_LOADED", draft, text: trimmed, source: filename || "import" });
+      notice("info", `已导入 JSON 规格：${filename || "自定义文件"}`);
+      return;
+    } catch (error) {
+      notice("error", `JSON 解析失败：${error.message}`);
+      return;
+    }
+  }
+  const draft = parseSpecMarkdownClient(trimmed);
+  store.dispatch({ type: "SPEC_LOADED", draft, text: trimmed, source: filename || "markdown" });
+  notice("info", `已导入 Markdown 规格：${filename || "自定义文档"}`);
+}
+
 async function checkSpec() {
-  const draft = currentDraft();
-  if (!draft) return;
-  store.dispatch({ type: "SPEC_PARSED", draft });
+  const parsed = parseSpecInput();
+  if (!parsed) return;
+  store.dispatch({ type: "SPEC_PARSED", draft: parsed.parsedPreview });
   try {
-    const checked = await api.submitSpec({ draft });
+    const checked = await api.submitSpec({ draft: parsed.draft, text: parsed.text });
+    if (checked.normalized) {
+      store.dispatch({ type: "SPEC_PARSED", draft: checked.normalized });
+    }
     store.dispatch({ type: "SPEC_CHECKED", issues: checked.issues });
     const { errors, warnings } = checked.issues;
     if (errors.length) notice("error", `发现 ${errors.length} 个规格缺口，先修复再确认`);
@@ -109,11 +174,14 @@ async function checkSpec() {
 }
 
 async function confirmSpec() {
-  const draft = currentDraft();
-  if (!draft) return;
-  store.dispatch({ type: "SPEC_PARSED", draft });
+  const parsed = parseSpecInput();
+  if (!parsed) return;
+  store.dispatch({ type: "SPEC_PARSED", draft: parsed.parsedPreview });
   try {
-    const checked = await api.submitSpec({ draft });
+    const checked = await api.submitSpec({ draft: parsed.draft, text: parsed.text });
+    if (checked.normalized) {
+      store.dispatch({ type: "SPEC_PARSED", draft: checked.normalized });
+    }
     store.dispatch({ type: "SPEC_CHECKED", issues: checked.issues });
     if (checked.issues.errors.length) {
       notice("error", `还有 ${checked.issues.errors.length} 个规格缺口，先修复再确认`);
@@ -128,74 +196,124 @@ async function confirmSpec() {
 
 /* ---------- 规划作业 ---------- */
 
-async function startPlanning() {
+async function startPlanning(visualize = false) {
   const state = store.getState();
   if (!state.spec?.locked) {
     notice("error", "请先确认规格，生成作业必须绑定确认过的输入快照");
+    return;
+  }
+  if (api.mode !== "http" || !liveLlmConfigured) {
+    notice("error", "实时 PM 未配置，请通过已配置模型的后端打开工作台。");
     return;
   }
   try {
     const job = await api.createPlanningJob({
       spec_ref: state.spec.ref,
       template_id: state.templateId,
-      config: store.getState().config,
-      mode: api.mode === "fixture" ? "offline_rule" : "live_llm",
+      config: state.config,
+      mode: "live_llm",
     });
     store.dispatch({ type: "JOB_STARTED", jobId: job.job_id });
-    pollJob(job.job_id);
+    pollJob(job.job_id, visualize);
   } catch (error) {
     fail(error);
   }
 }
 
-async function pollJob(jobId) {
+async function pollJob(jobId, visualize) {
   try {
     const job = await api.getPlanningJob(jobId);
+    const active = store.getState().job;
+    if ((active?.job_id ?? active?.id) !== jobId) return;
     store.dispatch({ type: "JOB_UPDATED", job });
     if (job.status === "succeeded") {
       const plan = await api.getPlan({
         planId: job.plan_ref.plan_id,
         revision: job.plan_ref.revision,
       });
+      if (store.getState().job?.job_id !== jobId) return;
       store.dispatch({ type: "JOB_SUCCEEDED", plan });
+      showStage("tasks");
+      if (visualize && await runValidation() && await runCompile()) {
+        showStage("flow");
+        graphLink.focus({preventScroll: true});
+        notice("info", "编排已完成，可在下方查看批次，或打开完整图谱。");
+      }
       return;
     }
     if (["failed", "invalid_output", "needs_clarification"].includes(job.status)) return;
-    setTimeout(() => pollJob(jobId), 450);
+    setTimeout(() => pollJob(jobId, visualize), 350);
   } catch (error) {
     fail(error);
   }
 }
 
-// Use the existing graph navigation; transfer only a compiled snapshot of the current revision.
-const graphNavigation = document.querySelector('nav a[href="../graph.html"]');
-graphNavigation?.addEventListener("click", (event) => {
+/* ---------- 图谱跳转 ---------- */
+
+for (const selector of ['nav a[href="../graph.html"]', '[data-action="open-graph"]']) {
+  const linkEl = document.querySelector(selector);
+  linkEl?.addEventListener("click", async (event) => {
+    const state = store.getState();
+    if (!state.plan) return;
+    event.preventDefault();
+    const current =
+      !state.stale &&
+      state.execution &&
+      state.execution.compiled !== false &&
+      [PHASE.PLAN_COMPILED, PHASE.PLAN_CONFIRMED].includes(state.phase) &&
+      state.execution.plan_ref?.revision === state.plan.revision;
+    if (!current) {
+      notice("warn", "请先完成当前修订的编排，再查看完整工作流图谱");
+      return;
+    }
+    if (api.mode === "http") {
+      const apiArg = api.base || "http";
+      location.href = `../graph.html?api=${encodeURIComponent(apiArg)}&plan_id=${encodeURIComponent(state.plan.plan_id)}&revision=${state.plan.revision}`;
+      return;
+    }
+    try {
+      sessionStorage.setItem(
+        "se.plan",
+        JSON.stringify({
+          ...state.plan,
+          source: "workspace",
+          status: state.phase === PHASE.PLAN_CONFIRMED ? "confirmed" : "compiled",
+          spec: state.spec?.draft ?? {},
+          capacity: state.config.max_concurrency,
+          batches: state.execution.batches,
+        }),
+      );
+      location.href = "../graph.html?sample=current";
+    } catch (error) {
+      fail(error);
+    }
+  });
+}
+
+/* ---------- 保存修订、校验、编排、确认、导出 ---------- */
+
+async function syncDraftIfNeeded({ silent = false } = {}) {
   const state = store.getState();
-  if (!state.plan) return;
-  event.preventDefault();
-  const current = !state.stale && state.execution && state.execution.compiled !== false &&
-    [PHASE.PLAN_COMPILED, PHASE.PLAN_CONFIRMED].includes(state.phase) &&
-    state.execution.plan_ref?.revision === state.plan.revision;
-  if (!current) {
-    notice("warn", "请先完成当前修订的编排，再查看图谱");
-    return;
-  }
+  if (api.mode !== "http" || !state.plan) return state.plan?.revision;
+  if (state.persistedRevision === state.plan.revision) return state.plan.revision;
+
+  const saved = await api.savePlan({
+    planId: state.plan.plan_id,
+    expected_revision: state.persistedRevision ?? 1,
+    tasks: state.plan.tasks,
+    config: state.config,
+  });
+  store.dispatch({ type: "PLAN_SYNCED", revision: saved.revision, silent });
+  return saved.revision;
+}
+
+async function runSave() {
   try {
-    sessionStorage.setItem("se.plan", JSON.stringify({
-      ...state.plan,
-      source: "workspace",
-      status: state.phase === PHASE.PLAN_CONFIRMED ? "confirmed" : "compiled",
-      spec: state.spec?.draft ?? {},
-      capacity: state.config.max_concurrency,
-      batches: state.execution.batches,
-    }));
-    location.href = "../graph.html?sample=current";
+    await syncDraftIfNeeded({ silent: false });
   } catch (error) {
     fail(error);
   }
-});
-
-/* ---------- 校验、编排、确认、导出 ---------- */
+}
 
 async function runValidation() {
   const state = store.getState();
@@ -204,13 +322,16 @@ async function runValidation() {
     return;
   }
   try {
+    const revision = await syncDraftIfNeeded({ silent: true });
+    const latest = store.getState();
     const report = await api.validate({
-      plan: state.plan,
-      spec: state.spec?.draft,
-      revision: state.plan.revision,
-      planId: state.plan.plan_id,
+      plan: latest.plan,
+      spec: latest.spec?.draft,
+      revision,
+      planId: latest.plan.plan_id,
     });
     store.dispatch({ type: "VALIDATED", report });
+    return !(report.errors?.length);
   } catch (error) {
     fail(error);
   }
@@ -223,13 +344,17 @@ async function runCompile() {
     return;
   }
   try {
+    const revision = await syncDraftIfNeeded({ silent: true });
+    const latest = store.getState();
     const execution = await api.compile({
-      plan: state.plan,
-      config: state.config,
-      revision: state.plan.revision,
-      planId: state.plan.plan_id,
+      plan: latest.plan,
+      config: latest.config,
+      revision,
+      planId: latest.plan.plan_id,
     });
     store.dispatch({ type: "COMPILED", execution });
+    if (execution.compiled !== false) showStage("flow");
+    return execution.compiled !== false;
   } catch (error) {
     fail(error);
   }
@@ -242,11 +367,11 @@ async function runConfirm() {
     const result = await api.confirm({
       planId: state.plan.plan_id,
       revision: state.plan.revision,
-      execution_plan_id: state.execution?.plan_ref?.execution_plan_id,
+      execution_plan_id: state.execution?.plan_ref?.execution_plan_id ?? state.execution?.execution_plan_id,
     });
     store.dispatch({
       type: "CONFIRMED",
-      revision: result.revision,
+      revision: result.revision ?? state.plan.revision,
       execution_plan_id: result.execution_plan_id,
     });
   } catch (error) {
@@ -254,7 +379,7 @@ async function runConfirm() {
   }
 }
 
-async function runExport() {
+async function runExport(format = "json") {
   const state = store.getState();
   if (!state.plan) {
     notice("warn", "没有可导出的计划");
@@ -269,8 +394,13 @@ async function runExport() {
       planId: state.plan.plan_id,
       revision: state.plan.revision,
     });
-    download(output.filename, output.json);
-    notice("info", `已导出 ${output.filename}（修订 ${state.plan.revision}）`);
+    if (format === "markdown") {
+      download(output.mdFilename ?? `${state.plan.plan_id}-r${state.plan.revision}.md`, output.markdown || "");
+      notice("info", `已导出 Markdown 清单（修订 ${state.plan.revision}）`);
+    } else {
+      download(output.filename, output.json);
+      notice("info", `已导出 ${output.filename}（修订 ${state.plan.revision}）`);
+    }
   } catch (error) {
     fail(error);
   }
@@ -283,26 +413,35 @@ function patchTask(taskId, patch) {
 }
 
 function addTask() {
-  const plan = store.getState().plan;
+  const state = store.getState();
+  const plan = state.plan;
   if (!plan) return;
-  const index = plan.tasks.length + 1;
+  const existing = new Set(plan.tasks.map((t) => t.id));
+  let index = plan.tasks.length + 1;
+  let id = `T-NEW-${String(index).padStart(2, "0")}`;
+  while (existing.has(id)) {
+    index += 1;
+    id = `T-NEW-${String(index).padStart(2, "0")}`;
+  }
+  const defaultReqId = state.spec?.draft?.requirements?.[0]?.id;
   store.dispatch({
     type: "TASK_ADD",
     task: {
-      id: `T-${String(index).padStart(2, "0")}`,
+      id,
       title: "新任务",
-      description: "",
+      description: "人工补充的开发或验证任务",
       kind: "implementation",
       stage: "implement",
       role: "backend",
-      requirement_ids: [],
+      requirement_ids: defaultReqId ? [defaultReqId] : [],
       module_ids: [],
       design_refs: [],
       inputs: [],
-      outputs: [],
+      outputs: [{ id: `O-${id}`, type: "implementation", description: "新任务产物" }],
       acceptance: [""],
       depends_on: [],
       priority: 1,
+      estimated_effort: { value: 4, unit: "人时", basis: "人工新增任务估算" },
     },
   });
   notice("warn", "已新增任务，请补写验收条件与依赖后再校验");
@@ -338,10 +477,6 @@ function setTemplate(templateId) {
   });
 }
 
-function setConfig(patch) {
-  store.dispatch({ type: "CONFIG_CHANGED", config: patch });
-}
-
 /* ---------- 渲染 ---------- */
 
 function renderVersions(state) {
@@ -362,35 +497,65 @@ function renderVersions(state) {
   `;
 }
 
-versionsEl.addEventListener("click", (event) => {
+versionsEl.addEventListener("click", async (event) => {
   const chip = event.target.closest("[data-revision]");
   if (!chip) return;
-  const entry = store.getState().history.find((item) => item.revision === Number(chip.dataset.revision));
+  const rev = Number(chip.dataset.revision);
+  const state = store.getState();
+  if (api.mode === "http" && state.plan?.plan_id) {
+    try {
+      const remotePlan = await api.getPlan({ planId: state.plan.plan_id, revision: rev });
+      download(`${state.plan.plan_id}-r${rev}.json`, JSON.stringify(remotePlan, null, 2));
+      return;
+    } catch {
+      // 未保存到服务端的本地草稿回退到本地历史快照
+    }
+  }
+  const entry = state.history.find((item) => item.revision === rev);
   if (!entry) return;
   download(
-    `${store.getState().plan?.plan_id ?? "plan"}-r${entry.revision}.json`,
+    `${state.plan?.plan_id ?? "plan"}-r${entry.revision}.json`,
     JSON.stringify({ revision: entry.revision, phase: entry.phase, tasks: entry.tasks }, null, 2),
   );
 });
 
+const MODE_LABEL = {
+  live_llm: "实时 PM",
+  offline_rule: "规则分解",
+  fixture_replay: "样例回放",
+  curated_example: "预编排案例",
+};
+
 function render(state) {
   phaseEl.textContent = PHASE_LABEL[state.phase] ?? state.phase;
   phaseEl.dataset.phase = state.phase;
+  const dirty = api.mode === "http" && state.plan && state.persistedRevision !== state.plan.revision;
+  const modeLabel = MODE_LABEL[state.plan?.generation_mode ?? state.generationMode] ?? "实时模型";
   const parts = [
     state.spec?.ref ? `规格 ${state.spec.ref.spec_id} v${state.spec.ref.version}` : "规格未确认",
     state.plan ? `计划 ${state.plan.plan_id} r${state.plan.revision}` : "无计划",
-    api.mode === "fixture" ? "离线规则（fixture）" : "实时模型（服务端）",
+    api.mode === "fixture" ? "演示模式" : liveLlmConfigured ? "DeepSeek 接入" : `后端已连接 · ${modeLabel}`,
   ];
+  if (dirty) parts.push("有未保存编辑");
   if (state.stale) parts.push("待重新编排");
   refsEl.textContent = parts.join(" ｜ ");
 
   messageEl.textContent = state.message?.text ?? "";
   messageEl.className = `ws-message ${state.message?.level ?? ""}`;
 
+  buttons.workflow.disabled = !state.spec?.locked || state.busy || api.mode === "fixture";
+  buttons.workflow.title = api.mode === "fixture" ? "请通过后端服务打开工作台" : "分解任务、校验并编排";
+  for (const button of stages) {
+    button.disabled = button.dataset.stage !== "spec" && !state.plan;
+  }
+  if (!state.plan && stage !== "spec") showStage("spec");
+  buttons.save.hidden = api.mode !== "http" || !state.plan;
+  buttons.save.disabled = !dirty || state.busy;
   buttons.validate.disabled = !state.plan || state.busy;
   buttons.compile.disabled = !state.plan || !state.validation || state.busy;
   buttons.confirm.disabled = state.phase !== PHASE.PLAN_COMPILED || state.stale || state.busy;
   buttons.export.disabled = !state.plan;
+  buttons.exportMd.disabled = !state.plan;
 
   for (const view of Object.values(views)) view.update(state);
   renderVersions(state);
@@ -399,14 +564,48 @@ function render(state) {
 store.subscribe(render);
 render(store.getState());
 
+async function resolveApi() {
+  const apiParam = params.get("api");
+  if (apiParam === "fixture") return createApi({ mode: "fixture", base: "." });
+  if (apiParam === "http") {
+    const base = location.port === "8010" || !location.port ? "" : "http://127.0.0.1:8010";
+    return createApi({ mode: "http", base });
+  }
+  if (apiParam && /^https?:\/\//i.test(apiParam)) {
+    return createApi({ mode: "http", base: apiParam });
+  }
+  // 无参数时探测同源后端 /health（由 uvicorn 托管时自动切到真实后端）
+  try {
+    const probe = await fetch("/health");
+    if (probe.ok) {
+      const data = await probe.json();
+      if (data?.status === "ok") {
+        liveLlmConfigured = Boolean(data.live_llm_configured);
+        return createApi({ mode: "http", base: "" });
+      }
+    }
+  } catch {
+    // 静态文件服务器环境回退到 fixture 模式
+  }
+  return createApi({ mode: "fixture", base: "." });
+}
+
 (async () => {
   try {
+    api = await resolveApi();
+    if (api.mode === "http") {
+      try {
+        const health = await api.loadHealth();
+        liveLlmConfigured = Boolean(health?.live_llm_configured);
+      } catch {
+        // ignore
+      }
+    }
     templates = await api.loadTemplates();
     views.spec.setTemplates(templates);
-    await actions.loadSample("chat");
+    render(store.getState());
+    window.__workspace = { store, api, actions };
   } catch (error) {
     fail(error);
   }
 })();
-
-window.__workspace = { store, api, actions };

@@ -2,21 +2,25 @@ import { escapeHtml } from "../../shared/dom.js";
 
 /**
  * 规格与配置视图（成员 1）。
- * 只负责渲染与派发意图；所有状态变化走 reducer，所有请求走 api。
+ * 支持 JSON / Markdown 设计规格输入、文件导入、缺口检查、确认锁定、模板与生成模式配置。
  */
 export function mountSpecEditor(root, { store, actions }) {
   root.innerHTML = `
-    <h2>规格与配置</h2>
+    <h2>产品设计规格</h2>
     <div class="ws-row">
-      <label class="grow">样例
-        <select data-role="sample">
-          <option value="chat">聊天 MVP</option>
-          <option value="community">内容社区 MVP（未接入）</option>
-        </select>
-      </label>
-      <button type="button" data-action="load">载入样例</button>
+      <div class="studio-samples" data-role="sample-menu" hidden>
+        <div class="studio-sample-options">
+          <button type="button" data-action="skip-sample">不载入样例</button>
+          <button type="button" data-action="load-sample" data-sample="chat">聊天 MVP</button>
+          <button type="button" data-action="load-sample" data-sample="community">内容社区 MVP</button>
+          <button type="button" data-action="load-sample" data-sample="unseen">校园失物招领 MVP</button>
+        </div>
+      </div>
+      <button type="button" data-action="import-file">导入文件</button>
+      <input type="file" data-role="file" accept=".json,.md,.markdown,.txt" hidden>
     </div>
-    <textarea data-role="text" spellcheck="false" aria-label="设计规格 JSON"></textarea>
+    <textarea data-role="text" spellcheck="false" aria-label="设计规格 JSON 或 Markdown"
+      placeholder="粘贴 DesignSpec JSON 或 Markdown（# 产品名称 / ## 产品范围 / ## 需求条目 / ## 模块 / ## 设计条目 / ## 约束）"></textarea>
     <div class="ws-row">
       <button type="button" data-action="check">检查缺口</button>
       <button type="button" data-action="confirm">确认规格</button>
@@ -25,35 +29,72 @@ export function mountSpecEditor(root, { store, actions }) {
     </div>
     <div data-role="issues" class="ws-issues"></div>
     <p data-role="ref" class="ws-meta"></p>
+    <details class="studio-settings">
+    <summary>生成设置</summary>
     <div class="ws-row">
       <label class="grow">模板 <select data-role="template"></select></label>
-      <label>全局并发 <input data-role="concurrency" type="number" min="1" max="6" step="1"></label>
     </div>
-    <div class="ws-row" data-role="caps"></div>
+    <p class="ws-meta" data-role="template-description"></p>
+    <p class="ws-meta">生成方式：实时 PM Agent（LLM）</p>
+    </details>
   `;
 
-  const sample = root.querySelector('[data-role="sample"]');
+  const samples = root.querySelector('[data-role="sample-menu"]');
+  const fileInput = root.querySelector('[data-role="file"]');
   const text = root.querySelector('[data-role="text"]');
   const issues = root.querySelector('[data-role="issues"]');
   const ref = root.querySelector('[data-role="ref"]');
   const template = root.querySelector('[data-role="template"]');
-  const concurrency = root.querySelector('[data-role="concurrency"]');
-  const caps = root.querySelector('[data-role="caps"]');
   const button = (name) => root.querySelector(`[data-action="${name}"]`);
 
   let lastToken = -1;
   let templates = [];
-  let capsSignature = "";
 
   root.addEventListener("click", (event) => {
     const target = event.target.closest("[data-action]");
     if (!target || target.disabled) return;
     const action = target.dataset.action;
-    if (action === "load") actions.loadSample(sample.value);
+    if (action === "skip-sample" || action === "load-sample") {
+      samples.hidden = true;
+      if (action === "load-sample") {
+        const state = store.getState();
+        if (state.busy || state.spec?.locked) return;
+        actions.loadSample(target.dataset.sample);
+      }
+      text.focus();
+    }
+    if (action === "import-file") fileInput.click();
     if (action === "check") actions.checkSpec();
     if (action === "confirm") actions.confirmSpec();
     if (action === "reopen") store.dispatch({ type: "SPEC_REOPEN" });
     if (action === "plan") actions.startPlanning();
+  });
+
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    fileInput.value = "";
+    if (!file) return;
+    const content = await file.text();
+    actions.importSpecText(content, file.name);
+  });
+
+  text.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !samples.hidden) {
+      samples.hidden = true;
+      return;
+    }
+    if (event.key === "/" && !event.isComposing && !event.ctrlKey && !event.metaKey &&
+        !text.readOnly && !store.getState().busy && !text.value.trim()) {
+      event.preventDefault();
+      samples.hidden = false;
+      samples.querySelector("button").focus();
+    }
+  });
+  samples.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !samples.hidden) {
+      samples.hidden = true;
+      text.focus();
+    }
   });
 
   text.addEventListener("input", () => {
@@ -61,22 +102,16 @@ export function mountSpecEditor(root, { store, actions }) {
   });
 
   template.addEventListener("change", () => actions.setTemplate(template.value));
-  concurrency.addEventListener("change", () => {
-    actions.setConfig({ max_concurrency: Number(concurrency.value) });
-  });
-  caps.addEventListener("change", (event) => {
-    const field = event.target.closest("[data-role]");
-    if (!field) return;
-    actions.setConfig({ role_capacity: { [field.dataset.role]: Number(field.value) } });
-  });
-
   function renderIssues(state) {
     const entries = state.specIssues;
     if (!entries) {
       issues.innerHTML = "";
       return;
     }
-    const rows = [...entries.errors.map((item) => ({ ...item, severity: "error" })), ...entries.warnings];
+    const rows = [
+      ...(entries.errors ?? []).map((item) => ({ ...item, severity: "error" })),
+      ...(entries.warnings ?? []),
+    ];
     if (!rows.length) {
       issues.innerHTML = `<p class="ok">规格信息完整，可以确认。</p>`;
       return;
@@ -86,7 +121,7 @@ export function mountSpecEditor(root, { store, actions }) {
         (item) => `
         <p class="issue ${escapeHtml(item.severity)}">
           <code>${escapeHtml(item.code)}</code>
-          <span class="path">${escapeHtml(item.field_path)}</span>
+          <span class="path">${escapeHtml(item.field_path ?? "")}</span>
           ${escapeHtml(item.message)}
         </p>`,
       )
@@ -99,7 +134,7 @@ export function mountSpecEditor(root, { store, actions }) {
       template.innerHTML = list
         .map(
           (item) =>
-            `<option value="${escapeHtml(item.template_id)}">${escapeHtml(item.name)} · 并发 ${item.max_concurrency}</option>`,
+            `<option value="${escapeHtml(item.template_id)}">${escapeHtml(item.name)}</option>`,
         )
         .join("");
     },
@@ -110,26 +145,18 @@ export function mountSpecEditor(root, { store, actions }) {
       }
       const locked = Boolean(state.spec?.locked);
       text.readOnly = locked;
-      button("check").disabled = state.busy || !state.spec;
-      button("confirm").disabled = state.busy || locked || !state.spec;
+      button("check").disabled = state.busy || !state.specText.trim();
+      button("confirm").disabled = state.busy || locked || !state.specText.trim();
       button("plan").disabled = state.busy || !locked;
       button("reopen").hidden = !locked;
-      sample.disabled = state.busy;
       template.disabled = state.busy;
       template.value = state.templateId;
-      if (document.activeElement !== concurrency) concurrency.value = state.config.max_concurrency;
 
-      const signature = JSON.stringify(state.config.role_capacity);
-      if (signature !== capsSignature) {
-        capsSignature = signature;
-        caps.innerHTML = Object.entries(state.config.role_capacity)
-          .map(
-            ([role, value]) => `
-            <label>${escapeHtml(role)} 容量
-              <input data-role="${escapeHtml(role)}" type="number" min="1" max="4" step="1" value="${Number(value)}">
-            </label>`,
-          )
-          .join("");
+      const selected = templates.find((item) => item.template_id === state.templateId);
+      const description = root.querySelector('[data-role="template-description"]');
+      description.textContent = selected?.description ?? "所选模板会自动设置执行容量。";
+      for (const option of root.querySelectorAll('[data-action="load-sample"]')) {
+        option.disabled = locked || state.busy;
       }
 
       ref.textContent = state.spec?.ref
@@ -139,7 +166,6 @@ export function mountSpecEditor(root, { store, actions }) {
           : "规格未确认，生成前需要先确认";
 
       renderIssues(state);
-      void templates;
     },
   };
 }

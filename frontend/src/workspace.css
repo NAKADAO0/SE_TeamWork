@@ -1,9 +1,21 @@
 /* 成员 1 · 规格与任务编辑工作台的布局样式。复用 demo/site.css 的配色与字体。 */
 
 .ws-main {
+  margin: 0 0 0 212px;
+  padding: 20px clamp(16px, 2.4vw, 32px);
+  max-width: none;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow-x: hidden;
+}
+
+@media (max-width: 900px) {
+  .ws-main {
+    margin-left: 66px;
+    padding: 16px 12px;
+  }
 }
 
 .ws-bar {
@@ -43,6 +55,24 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.ws-graph-link {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 7px;
+  background: #eef2fb;
+  color: #294775;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid #c8d4eb;
+}
+
+.ws-graph-link:hover {
+  background: #e1e9fa;
+  text-decoration: none;
 }
 
 .ws-meta {
@@ -460,3 +490,42 @@ button.active {
       "batches";
   }
 }
+
+/* Planning overview and visual hierarchy */
+.studio-intro {display:flex;justify-content:space-between;align-items:center;gap:24px;padding:26px clamp(18px,4vw,38px);margin-bottom:14px;border-radius:20px;background:linear-gradient(115deg,#142641,#283e74 75%,#46468a);color:#fff}
+.studio-intro h1 {margin:0;font-size:clamp(24px,3vw,36px);letter-spacing:-.04em}
+.studio-intro p {margin:6px 0 0;color:#e1e9fa;font-size:14px}
+.studio-intro .studio-run {background:#e4edff;color:#192f61;font-weight:700;white-space:nowrap;padding:12px 18px}
+.studio-flow {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));list-style:none;counter-reset:step;margin:0 0 16px;padding:0;gap:8px}
+.studio-flow li {display:flex;align-items:center;gap:9px;counter-increment:step;background:white;border:1px solid #dce4f1;border-radius:11px;padding:10px;font-size:13px;color:#526579}
+.studio-flow li::before {content:counter(step);background:#edf1f7;color:#455774;border-radius:50%;width:22px;height:22px;display:grid;place-items:center;flex:none}
+.studio-flow li.complete::before {content:"✓";background:#d9f4e9;color:#126551}
+.studio-flow li[aria-current] {border-color:#6383d3;background:#edf3ff;color:#243c80;font-weight:700}
+.studio-flow li[aria-current]::before {background:#3657cb;color:#fff}
+.ws-panel {border-top:1px solid #d7dfeb;box-shadow:0 4px 18px #20345c0c}
+@media(max-width:640px){.studio-intro{align-items:flex-start;flex-direction:column;gap:12px}.studio-flow{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Single-column workspace, grouped by the active planning step. */
+.ws-main { max-width: 1370px; padding: clamp(22px, 4vw, 52px); gap: 16px; }
+.studio-page-title h1 { margin: 0; font-size: clamp(27px, 4vw, 39px); letter-spacing: -.035em; }
+.studio-page-title p { margin: 3px 0 0; color: #53637a; }
+.studio-tabs { display: flex; flex-wrap: wrap; gap: 18px; border-bottom: 1px solid #d9e1ed; margin: 0; }
+.studio-tabs button { color: #526579; background: transparent; border-radius: 0; padding: 9px 3px; border-bottom: 2px solid transparent; }
+.studio-tabs button[aria-current] { color: #3053bd; font-weight: 700; border-bottom-color: currentColor; }
+.studio-sheet { background: #fff; border: 1px solid #dce3ee; border-radius: 16px; padding: clamp(14px, 3vw, 28px); box-shadow: 0 3px 14px #152c5310; min-width: 0; }
+.studio-sheet h2 { margin: 0 0 12px; font-size: 18px; }
+.studio-sheet[hidden], .ws-main [hidden] { display: none !important; }
+.studio-settings { margin-top: 16px; border-top: 1px solid #e5ebf3; padding-top: 10px; }
+.studio-settings > summary { cursor: pointer; color: #324a76; margin-bottom: 10px; }
+.studio-section, .studio-footer { border-top: 1px solid #e5ebf3; margin-top: 18px; padding-top: 16px; }
+.studio-footer { display: flex; justify-content: flex-end; gap: 8px; }
+.studio-flow-toolbar { padding-bottom: 16px; }
+.ws-message:empty { display: none; }
+.ws-status .ws-meta { overflow-wrap: anywhere; }
+.studio-sheet textarea { width: 100%; min-height: 300px; }
+@media (max-width: 900px) { .ws-main { padding: 20px 12px; } }
+
+.studio-samples {position:relative}
+.studio-sample-options {position:absolute;z-index:5;top:calc(100% + 6px);left:0;min-width:190px;display:grid;padding:6px;background:#fff;border:1px solid #dce3ee;border-radius:10px;box-shadow:0 8px 20px #152c5320}
+.studio-sample-options button {background:white;color:#243756;text-align:left;white-space:nowrap}
+.studio-sample-options button:hover,.studio-sample-options button:focus-visible {background:#eef4ff}
