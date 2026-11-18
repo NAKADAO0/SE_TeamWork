@@ -2,5 +2,5 @@
 <label>规格来源 <select id="sample"><option value="custom">其他 · 自定义产品</option><option value="chat">聊天 MVP</option><option value="community">内容社区 MVP</option></select></label>
 <p><label>设计规格 JSON<textarea id="spec"></textarea></label></p>
 <label>并发数 <input id="capacity" type="number" min="1" value="2"></label>
-<button id="run">生成计划</button> <a class="graphlink" href="graph.html">查看工作流图谱 ↗</a> <button id="save" disabled>导出 JSON</button>
+<button id="run">生成计划</button> <a class="graphlink" href="graph.html?sample=current">查看工作流图谱 ↗</a> <button id="save" disabled>导出 JSON</button>
 <output id="error" role="alert"></output><ol id="result"></ol><script type="module" src="./demo/app.js"></script></main></body></html>

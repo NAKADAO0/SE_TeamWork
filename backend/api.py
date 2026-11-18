@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import os
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +14,7 @@ class DraftUpdate(BaseModel):
     plan: dict
 
 
+from .graph_api import graph_router
 from .delivery import delivery_router
 from .workflow import initialize, workflow_router
 
@@ -50,6 +52,10 @@ def create_app(path=None, planner=None, validator=None, compiler=None):
         except RevisionConflict as conflict:
             raise HTTPException(409, detail={"current_revision": conflict.args[0]})
 
+    app.add_middleware(CORSMiddleware,
+        allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_methods=["GET"], allow_headers=["Content-Type"])
+    app.include_router(graph_router(store))
     app.include_router(workflow_router(store, planner))
     app.include_router(delivery_router(store, validator, compiler))
     return app

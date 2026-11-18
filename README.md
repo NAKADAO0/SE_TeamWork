@@ -69,3 +69,20 @@ python -m http.server 8010 --bind 127.0.0.1
 接口契约见 `docs/frontend-api-contract.md`，交接说明见 `docs/handoff/成员1-交接.md`。
 Node 22+ 运行 `npm test` 可复核状态机、缺口检查、环检测、排批与视图冒烟；加 `?api=http` 可切到真实服务端。
 
+
+## 图谱读取数据库计划
+
+图谱可直接读取成员 5 的 SQLite 计划、修订和已保存编排结果。保持前端静态服务在 8000，另一个终端启动后端（Python 3.11+，Node 22+）：
+
+```sh
+python -m pip install -r backend/requirements.txt
+python -m uvicorn backend.api:app --host 127.0.0.1 --port 8010
+```
+
+打开 http://127.0.0.1:8000/graph.html?api=http&plan_id=chat-demo 。顶部计划和版本下拉框读取数据库，最新修订排在前面。`revision=1` 固定读取历史版本；省略时读取最新。自定义服务地址可用 `api=http://127.0.0.1:其他端口`。不带 `api` 参数时继续使用原有本地入口。
+
+图谱新增的只读端点为 `GET /plans`、`GET /plans/{id}/revisions` 和 `GET /plans/{id}/graph?revision=1`，复用原 `plans`、`revisions`、`artifacts` 表，不增加数据库或迁移。未编排的草稿提示先编排；查询历史版本不会重算批次或修改确认状态。任务执行进度尚无服务端来源，数据库模式显示未接入。
+
+运行 `python -m unittest discover -s tests -p 'test_*.py'` 检查版本隔离、读接口、并发保存与完整工作流；`npm test` 检查前端现有规则。
+
+图谱一致性回归覆盖 JSON/Markdown 导出、任务与依赖边、执行批次、报告引用，以及修改容量和依赖后历史修订在服务重启前后的稳定性；已由现有 Plan API CI 自动发现并执行。
