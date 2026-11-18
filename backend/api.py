@@ -2,9 +2,9 @@ from contextlib import asynccontextmanager
 import os
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -31,6 +31,13 @@ def create_app(path=None, planner=None, validator=None, compiler=None):
         yield
 
     app = FastAPI(title="Lab2 计划服务", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def revalidate_frontend(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.endswith(("/", ".html", ".js", ".css")):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
     @app.get("/health")
     def health():
@@ -89,8 +96,13 @@ def create_app(path=None, planner=None, validator=None, compiler=None):
     app.include_router(workflow_router(store, planner))
     app.include_router(delivery_router(store, validator, compiler))
 
+    @app.get("/workspace.html", include_in_schema=False)
+    def legacy_workspace(request: Request):
+        query = f"?{request.url.query}" if request.url.query else ""
+        return RedirectResponse(f"/frontend/{query}")
+
     # 同源静态资源托管：一条 uvicorn 命令即可完整运行前端工作台、图谱与后端接口
-    for page in ("index.html", "workspace.html", "graph.html", "examples.html", "guide.html"):
+    for page in ("index.html", "graph.html", "examples.html", "guide.html"):
         page_path = ROOT / page
         if page_path.exists():
             route = "/" if page == "index.html" else f"/{page}"
