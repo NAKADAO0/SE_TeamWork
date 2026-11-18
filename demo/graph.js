@@ -13,7 +13,7 @@ const roles = { backend: '后端', frontend: '前端', qa: '测试' };
 
 const taskStates = {
   pending: '未开始', running: '进行中', completed: '已完成',
-  failed: '失败', blocked: '阻塞', unknown: '未接入',
+  failed: '失败', blocked: '阻塞', unknown: '未完成',
 };
 const planStates = { draft: '草稿', validated: '已校验', compiled: '已编排', confirmed: '已确认' };
 function statusBadge(status) {
@@ -49,7 +49,10 @@ async function show() {
     url.searchParams.set('revision', versionPicker.value);
     location.href = url.href;
   });
-  const { tasks, batches, spec } = plan;
+  const { tasks, batches } = plan;
+  const spec = plan.spec ?? plan.normalized_spec ?? {};
+  const productObj = spec.product ?? plan.spec_ref?.spec_id ?? plan.plan_id ?? '产品';
+  const productName = typeof productObj === 'object' ? (productObj?.name ?? '产品') : productObj;
   if (!Array.isArray(tasks) || !tasks.length || !Array.isArray(batches)) throw new Error('计划缺少任务或批次');
   const picker = document.querySelector('#graph-sample');
   if (remote) picker.replaceChildren(...remote.plans.map(item => new Option(item.title, item.plan_id)));
@@ -69,9 +72,16 @@ async function show() {
   const execution = metadata?.execution ?? {};
   const statusOf = id => Object.hasOwn(taskStates, execution[id]?.status) ? execution[id].status : 'unknown';
   const done = new Set(tasks.filter(task => statusOf(task.id) === 'completed').map(task => task.id));
+  const modeNames = {
+    live_llm: '实时 PM',
+    offline_rule: '离线规则',
+    fixture_replay: '样例回放',
+    curated_example: '预编排案例',
+  };
   const planStatus = metadata?.planStatus ?? plan.status;
+  const modeLabel = modeNames[plan.generation_mode ?? plan.mode] ?? '';
   const statusSummary = document.querySelector('#plan-status');
-  statusSummary.innerHTML = `<span class="plan-badge plan-${Object.hasOwn(planStates, planStatus) ? planStatus : 'unknown'}">${planStates[planStatus] ?? '未提供'}</span>${preview ? '' : '<span class="execution-unavailable">无执行数据</span>'}`;
+  statusSummary.innerHTML = `<span class="plan-badge plan-${Object.hasOwn(planStates, planStatus) ? planStatus : 'unknown'}">${planStates[planStatus] ?? '未提供'}</span>${modeLabel ? `<span class="plan-badge plan-draft">${escape(modeLabel)}</span>` : ''}${preview ? '' : '<span class="execution-unavailable">规划视图</span>'}`;
   document.querySelector('#status-legend').innerHTML = `<span>任务状态</span>${['pending', 'running', 'completed', 'failed', 'blocked'].map(statusBadge).join('')}`;
   const stageTitles = { design: '设计与定义', implement: '功能实现', verify: '验证与测试', test: '验证与测试', integrate: '集成与交付' };
   const phaseGroups = new Map();
@@ -86,11 +96,10 @@ async function show() {
   const labels = new Map();
   phases.forEach((phase, pi) => phase.tasks.forEach((id, ti) => labels.set(id, `Task ${pi + 1}.${ti + 1}`)));
   const countEdges = tasks.reduce((sum, task) => sum + deps(task).length, 0);
-  document.querySelector('#summary').textContent = `${preview ? '样例预览' : '当前本地计划'} · ${typeof spec.product === 'object' ? spec.product.name : spec.product} · ${tasks.length} 个任务 · ${countEdges} 条依赖 · ${batches.length} 个批次${plan.revision ? ` · 修订 r${plan.revision}` : ''}`;
-  // Legacy generated plans remain in the legacy workbench until HTTP integration is ready.
-  if (!preview) document.querySelector('#return-link').href = plan.source === 'workspace' ? 'frontend/' : 'workspace.html';
+  document.querySelector('#summary').textContent = `${preview ? '样例预览' : remote ? '服务端计划' : '当前本地计划'} · ${productName} · ${tasks.length} 个任务 · ${countEdges} 条依赖 · ${batches.length} 个批次${plan.revision ? ` · 修订 r${plan.revision}` : ''}`;
+  if (!preview) document.querySelector('#return-link').href = remote || plan.source === 'workspace' ? 'frontend/' : 'workspace.html';
   const percent = Math.round(done.size / tasks.length * 100);
-  document.querySelector('#progress').innerHTML = `<div class="progress-heading"><h2>总开发进度</h2>${preview ? '' : '<span class="execution-unavailable">暂无数据</span>'}</div><div class="total-value">${preview ? `${done.size}/${tasks.length}` : '—'} <small>${preview ? `已完成 · ${percent}%` : '未接入任务执行状态'}</small></div>${preview ? `<progress value="${done.size}" max="${tasks.length}" aria-label="模拟总开发进度"></progress>` : ''}`;
+  document.querySelector('#progress').innerHTML = `<div class="progress-heading"><h2>总开发进度</h2>${preview ? '' : '<span class="execution-unavailable">暂无数据</span>'}</div><div class="total-value">${preview ? `${done.size}/${tasks.length}` : '—'} <small>${preview ? `已完成 · ${percent}%` : '未完成'}</small></div>${preview ? `<progress value="${done.size}" max="${tasks.length}" aria-label="模拟总开发进度"></progress>` : ''}`;
   const list = document.querySelector('#task-list');
   list.innerHTML = phases.map((phase, pi) => {
     const ids = phase.tasks.filter(id => byId.has(id));
@@ -205,7 +214,23 @@ async function show() {
       if (path.dataset.from === id || path.dataset.to === id) path.parentNode.append(path);
     }
     const names = ids => ids.map(ref => `${labels.get(ref)} ${byId.get(ref)?.title ?? ref}`).join('；') || '无';
-    const fields = [ ['角色', roles[task.role] ?? task.role], ['所属需求', task.requirement_ids ?? task.source], ['前置任务', names(previous)], ['后续任务', names(next)], ['交付产物', task.output ?? task.outputs], ['验收条件', task.acceptance] ];
+    const depReasons = (task.depends_on ?? [])
+      .filter(d => typeof d === 'object' && d?.reason)
+      .map(d => `${d.task_id}: ${d.reason}`);
+    const effortText = task.estimated_effort
+      ? `${task.estimated_effort.value} ${task.estimated_effort.unit}${task.estimated_effort.basis ? `（${task.estimated_effort.basis}）` : ''}`
+      : null;
+    const fields = [
+      ['角色', roles[task.role] ?? task.role],
+      ['阶段', stageTitles[task.stage] ?? task.stage ?? '未标注'],
+      ['所属需求', task.requirement_ids ?? task.source],
+      ['前置任务', names(previous)],
+      ...(depReasons.length ? [['依赖理由', depReasons]] : []),
+      ['后续任务', names(next)],
+      ['交付产物', task.output ?? task.outputs],
+      ['验收条件', task.acceptance],
+      ...(effortText ? [['工作量估算', effortText]] : []),
+    ];
     document.querySelector('#detail').innerHTML = `<h2>任务详情</h2><div class="reference">${labels.get(id)} · ${escape(id)}</div><h3>${escape(task.title)}</h3>${statusBadge(statusOf(id))}${execution[id]?.reason ? `<p class="state-reason state-${statusOf(id)}">${escape(execution[id].reason)}</p>` : ''}<dl>${fields.map(([label, value]) => `<div><dt>${label}</dt><dd>${escape(text(value))}</dd></div>`).join('')}</dl>`;
   }
   view.addEventListener('click', event => {

@@ -107,7 +107,7 @@ test("规格编辑器可以渲染草稿与已确认两种状态", () => {
   const state = hydratedState();
   assert.doesNotThrow(() => view.update(reduce(state, { type: "SPEC_TEXT_CHANGE", text: "{}" })));
   assert.doesNotThrow(() => view.update(state));
-  assert.match(root.innerHTML, /规格与配置/);
+  assert.match(root.innerHTML, /产品设计规格/);
 });
 
 test("任务表渲染全部任务与问题标记", () => {

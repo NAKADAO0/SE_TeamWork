@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>规划工作台 v2 · SE Workflow</title>
+<title>需求工作台 · SE Workflow</title>
 <link rel="stylesheet" href="../demo/site.css">
 <link rel="stylesheet" href="src/workspace.css">
 <body>
@@ -19,30 +19,51 @@
   <footer>第十二组 · Lab 2</footer>
 </aside>
 <main class="ws-main">
+  <div class="studio-page-title">
+    <h1>规划工作台</h1>
+    <p>从产品设计规格生成可执行的开发计划</p>
+  </div>
+  <nav class="studio-tabs" aria-label="规划步骤">
+    <button type="button" data-stage="spec" aria-current="step">设计规格</button>
+    <button type="button" data-stage="tasks" disabled>开发任务</button>
+    <button type="button" data-stage="flow" disabled>执行编排</button>
+  </nav>
   <header class="ws-bar">
     <div class="ws-status">
       <span class="ws-phase" data-role="phase">规格草稿</span>
       <span class="ws-meta" data-role="refs"></span>
     </div>
-    <div class="ws-actions">
-      <button type="button" data-action="validate">校验</button>
-      <button type="button" data-action="compile">编排</button>
-      <button type="button" data-action="confirm">确认版本</button>
-      <button type="button" data-action="export">导出 JSON</button>
-    </div>
   </header>
-
   <p class="ws-message" data-role="message" role="status" aria-live="polite"></p>
 
-  <div class="ws-grid">
-    <section class="ws-panel" data-view="spec"></section>
-    <section class="ws-panel" data-view="table"></section>
-    <section class="ws-panel" data-view="detail"></section>
-    <section class="ws-panel" data-view="graph"></section>
-    <section class="ws-panel wide" data-view="batches"></section>
-  </div>
+  <section class="studio-sheet" data-stage-panel="spec">
+    <div data-view="spec"></div>
+    <div class="studio-footer">
+      <button type="button" class="studio-run" data-action="run-workflow">生成工作流</button>
+    </div>
+  </section>
 
-  <footer class="ws-versions" data-role="versions"></footer>
+  <section class="studio-sheet" data-stage-panel="tasks" hidden>
+    <div data-view="table"></div>
+    <div class="studio-section" data-view="detail"></div>
+    <div class="studio-footer ws-actions">
+      <button type="button" data-action="save" hidden>保存修订</button>
+      <button type="button" data-action="validate">校验</button>
+      <button type="button" data-action="compile">编排</button>
+    </div>
+  </section>
+
+  <section class="studio-sheet" data-stage-panel="flow" hidden>
+    <div class="studio-flow-toolbar ws-actions">
+      <a class="ws-graph-link" data-action="open-graph" href="../graph.html">打开完整图谱 ↗</a>
+      <button type="button" data-action="confirm">确认版本</button>
+      <button type="button" data-action="export">导出 JSON</button>
+      <button type="button" data-action="export-md">导出 Markdown</button>
+    </div>
+    <div data-view="graph"></div>
+    <div class="studio-section" data-view="batches"></div>
+    <footer class="ws-versions" data-role="versions"></footer>
+  </section>
 </main>
 <script type="module" src="src/main.js"></script>
 </body>

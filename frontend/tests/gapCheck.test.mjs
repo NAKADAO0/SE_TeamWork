@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { gapCheck } from "../src/features/spec-editor/gapCheck.js";
+import { gapCheck, parseSpecMarkdownClient } from "../src/features/spec-editor/gapCheck.js";
 
 const specDraft = JSON.parse(
   await readFile(new URL("../fixtures/spec-chat.json", import.meta.url), "utf8"),
@@ -45,4 +45,17 @@ test("一句话产品意图只给出缺口，不冒充完整规格", () => {
   const result = gapCheck({ product: { name: "我要做微信" }, requirements: [] });
   assert.ok(result.errors.some((item) => item.code === "MISSING_SCOPE"));
   assert.ok(result.errors.some((item) => item.code === "MISSING_REQUIREMENTS"));
+});
+
+test("契约 DesignSpec 与现场 Markdown 规格也能通过缺口检查", async () => {
+  const contractSpec = JSON.parse(
+    await readFile(new URL("../../examples/contracts/chat/design-spec.json", import.meta.url), "utf8"),
+  );
+  assert.deepEqual(codes(gapCheck(contractSpec).errors), []);
+
+  const unseenMd = await readFile(new URL("../../examples/unseen-spec/spec.md", import.meta.url), "utf8");
+  const parsedMd = parseSpecMarkdownClient(unseenMd);
+  assert.equal(parsedMd.requirements.length, 4);
+  assert.equal(parsedMd.modules.length, 4);
+  assert.deepEqual(codes(gapCheck(unseenMd).errors), []);
 });

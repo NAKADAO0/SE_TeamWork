@@ -15,7 +15,9 @@ def graph_router(store):
                 JOIN revisions r ON r.plan_id=p.id AND r.revision=p.revision ORDER BY p.id''').fetchall()
         result = []
         for pid, revision, document in rows:
-            product = json.loads(document).get('spec', {}).get('product', pid)
+            doc = json.loads(document)
+            spec = doc.get('spec') or doc.get('normalized_spec') or {}
+            product = spec.get('product') or (doc.get('spec_ref') or {}).get('spec_id') or pid
             title = product.get('name', pid) if isinstance(product, dict) else product
             result.append({'plan_id': pid, 'title': title, 'latest_revision': revision})
         return result
@@ -40,10 +42,28 @@ def graph_router(store):
                 'SELECT kind,body FROM artifacts WHERE plan_id=? AND revision=?', (pid, row[0]))}
         plan = json.loads(row[1])
         execution = artifacts.get('execution')
+        validation = artifacts.get('validation')
         batches = execution['batches'] if execution else plan.get('batches', [])
-        status = 'confirmed' if 'confirmation' in artifacts else 'compiled' if execution or batches else 'validated' if artifacts.get('validation') and not artifacts['validation'].get('errors') else 'draft'
-        return {'plan_id': pid, 'revision': row[0], 'plan': {
-            **plan, 'plan_id': pid, 'revision': row[0], 'batches': batches, 'status': status,
-        }, 'execution': execution}
+        status = 'confirmed' if 'confirmation' in artifacts else 'compiled' if execution or batches else 'validated' if validation and not validation.get('errors') else 'draft'
+        plan_payload = {
+            **plan,
+            'plan_id': pid,
+            'revision': row[0],
+            'batches': batches,
+            'status': status,
+        }
+        if 'spec' not in plan_payload and 'normalized_spec' in plan:
+            plan_payload['spec'] = plan['normalized_spec']
+        if execution and execution.get('batch_details') is not None:
+            plan_payload['batch_details'] = execution['batch_details']
+        if execution and execution.get('topological_levels') is not None:
+            plan_payload['topological_levels'] = execution['topological_levels']
+        return {
+            'plan_id': pid,
+            'revision': row[0],
+            'plan': plan_payload,
+            'execution': execution,
+            'validation': validation,
+        }
 
     return router

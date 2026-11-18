@@ -85,7 +85,7 @@ SPEC = {
     "scope":        ["scope", "range"],
     "requirements": ["requirements", "reqs"],
     "modules":      ["modules"],
-    "design_refs":  ["design_refs", "designs"],
+    "design_refs":  ["design_refs", "design_items", "design", "designs"],
     "constraints":  ["constraints"],
 }
 

@@ -2,10 +2,10 @@
  * 工作台的数据访问层：界面只依赖这里的方法名与返回形状。
  *
  * - mode=fixture：读 frontend/fixtures，编辑只存在内存，用于无后端演示；
- * - mode=http：按设计文档 §7.1 的路径请求真实的 Python 服务。
+ * - mode=http：请求真实的 Python FastAPI 服务（支持同源 / 跨端口）。
  * 换后端时只改这一层，界面与 reducer 不动。
  */
-import { gapCheck } from "../features/spec-editor/gapCheck.js";
+import { gapCheck, parseSpecMarkdownClient } from "../features/spec-editor/gapCheck.js";
 import { schedule } from "./fixtureSchedule.js";
 import { precheck } from "./precheck.js";
 
@@ -33,6 +33,12 @@ function createFixtureApi(base) {
     return response.json();
   }
 
+  async function readText(path) {
+    const response = await fetch(`${base}/${path}`);
+    if (!response.ok) throw new ApiError("FIXTURE_MISSING", `无法读取样例：${path}`);
+    return response.text();
+  }
+
   async function loadPlan() {
     plan = clone(await readJson("fixtures/taskplan-chat.json"));
     return clone(plan);
@@ -40,22 +46,35 @@ function createFixtureApi(base) {
 
   return {
     mode: "fixture",
+    base,
+    async loadHealth() {
+      return { status: "ok", live_llm_configured: false, modes: ["offline_rule"] };
+    },
     async loadTemplates() {
       return readJson("fixtures/templates.json");
     },
-    async loadSpecSample() {
-      return readJson("fixtures/spec-chat.json");
+    async loadSpecSample(name = "chat") {
+      const samples = new Map([
+        ["chat", "contracts/chat/design-spec.md"],
+        ["community", "contracts/community/design-spec.md"],
+        ["unseen", "unseen-spec/spec.md"],
+        ["custom", "design-spec-template.md"],
+      ]);
+      if (!samples.has(name)) throw new ApiError("SAMPLE_NOT_FOUND", "样例规格不存在");
+      const text = await readText(`../examples/${samples.get(name)}`);
+      return { name, format: "markdown", draft: parseSpecMarkdownClient(text), text };
     },
     async loadPlanSample() {
       polls = 0;
       return loadPlan();
     },
-    async submitSpec({ draft }) {
+    async submitSpec({ draft, text }) {
+      const parsed = draft ?? parseSpecMarkdownClient(text ?? "");
       return {
-        spec_id: draft?.spec_id ?? "SPEC-DRAFT",
-        version: Number(draft?.version ?? 0) + 1,
-        draft,
-        issues: gapCheck(draft),
+        spec_id: parsed?.spec_id ?? "SPEC-DRAFT",
+        version: Number(parsed?.version ?? 0) + 1,
+        draft: parsed,
+        issues: gapCheck(parsed),
       };
     },
     async confirmSpec({ specId, version }) {
@@ -87,7 +106,7 @@ function createFixtureApi(base) {
       if (!plan) await loadPlan();
       if (plan.plan_id !== planId) throw new ApiError("NOT_FOUND", "计划不存在");
       if (Number(expected_revision) !== plan.revision) {
-        throw new ApiError("REVISION_CONFLICT", "修订已过期，请刷新后重试", { current: plan.revision });
+        throw new ApiError("REVISION_CONFLICT", "修订已过期，请刷新后重试", { current_revision: plan.revision });
       }
       plan = { ...plan, tasks, revision: plan.revision + 1 };
       return { plan_id: plan.plan_id, revision: plan.revision };
@@ -129,8 +148,9 @@ function createFixtureApi(base) {
         execution_plan: execution,
         validation_report: validation,
       };
+      const prodName = typeof spec?.product === "string" ? spec.product : spec?.product?.name ?? "计划";
       const lines = [
-        `# ${spec?.product?.name ?? "计划"} · 修订 ${current.revision}`,
+        `# ${prodName} · 修订 ${current.revision}`,
         "",
         `- 规格：${current.spec_ref?.spec_id ?? "-"} v${current.spec_ref?.version ?? "-"}`,
         `- 模板：${current.template_ref?.template_id ?? "-"}`,
@@ -152,48 +172,114 @@ function createFixtureApi(base) {
         json: JSON.stringify(payload, null, 2),
         markdown: lines.join("\n"),
         filename: `${current.plan_id}-r${current.revision}.json`,
+        mdFilename: `${current.plan_id}-r${current.revision}.md`,
       };
     },
   };
 }
 
 function createHttpApi(base) {
+  const prefix = String(base ?? "").replace(/\/$/, "");
+
   async function request(method, path, body) {
-    const response = await fetch(`${base}${path}`, {
-      method,
-      headers: body ? { "content-type": "application/json" } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let response;
+    try {
+      response = await fetch(`${prefix}${path}`, {
+        method,
+        headers: body !== undefined ? { "content-type": "application/json" } : {},
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch {
+      throw new ApiError("NETWORK_ERROR", "无法连接后端计划服务，请确认服务已启动");
+    }
     const data = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new ApiError(
-        data?.code ?? `HTTP_${response.status}`,
-        data?.message ?? `请求失败（${response.status}）`,
-        data?.details ?? {},
-      );
+      const detail = data?.detail;
+      const detailObj = detail && typeof detail === "object" && !Array.isArray(detail) ? detail : data ?? {};
+      const code =
+        data?.code ??
+        detailObj?.code ??
+        (response.status === 409 ? "REVISION_CONFLICT" : `HTTP_${response.status}`);
+      const msg =
+        (typeof detail === "string" ? detail : null) ??
+        data?.message ??
+        detailObj?.message ??
+        (response.status === 409 && detailObj?.current_revision
+          ? `修订已过期，服务端最新修订为 r${detailObj.current_revision}`
+          : `请求失败（${response.status}）`);
+      throw new ApiError(code, msg, detailObj);
     }
     return data;
   }
 
   return {
     mode: "http",
+    base: prefix,
+    loadHealth: () => request("GET", "/health"),
     loadTemplates: () => request("GET", "/templates"),
-    loadSpecSample: () => request("GET", "/specs/sample/chat"),
-    loadPlanSample: () => request("GET", "/plans/sample/chat"),
-    submitSpec: ({ draft }) => request("POST", "/specs", { draft }),
+    loadSpecSample: (name = "chat") => request("GET", `/specs/sample/${encodeURIComponent(name)}`),
+    async loadPlanSample() {
+      const res = await request("GET", "/plans/chat-demo");
+      return res.plan ?? res;
+    },
+    submitSpec: ({ draft, text }) =>
+      request("POST", "/specs", draft !== undefined && draft !== null ? { draft } : { text }),
     confirmSpec: ({ specId, version }) =>
-      request("POST", `/specs/${specId}/confirm`, { expected_version: version }),
-    createPlanningJob: (body) => request("POST", "/planning-jobs", body),
-    getPlanningJob: (jobId) => request("GET", `/planning-jobs/${jobId}`),
-    getPlan: ({ planId, revision }) => request("GET", `/plans/${planId}?revision=${revision}`),
-    savePlan: ({ planId, expected_revision, tasks }) =>
-      request("PUT", `/plans/${planId}`, { expected_revision, tasks }),
-    validate: ({ planId, revision }) => request("POST", `/plans/${planId}/validate`, { revision }),
-    compile: ({ planId, revision, config }) =>
-      request("POST", `/plans/${planId}/compile`, { revision, config }),
+      request("POST", `/specs/${encodeURIComponent(specId)}/confirm`, { expected_version: version }),
+    createPlanningJob: ({ spec_ref, template_id, config, mode }) =>
+      request("POST", "/planning-jobs", {
+        spec_ref,
+        template_ref: `${template_id || "default"}@1`,
+        template_id,
+        config,
+        mode,
+      }),
+    getPlanningJob: (jobId) => request("GET", `/planning-jobs/${encodeURIComponent(jobId)}`),
+    async getPlan({ planId, revision }) {
+      const query = revision ? `?revision=${encodeURIComponent(revision)}` : "";
+      const res = await request("GET", `/plans/${encodeURIComponent(planId)}${query}`);
+      const plan = res.plan ?? res;
+      return { ...plan, plan_id: res.plan_id ?? plan.plan_id, revision: res.revision ?? plan.revision };
+    },
+    savePlan: ({ planId, expected_revision, tasks, config }) =>
+      request("PUT", `/plans/${encodeURIComponent(planId)}`, { expected_revision, tasks, config }),
+    validate: ({ planId, revision }) =>
+      request("POST", `/plans/${encodeURIComponent(planId)}/validate`, { revision }),
+    async compile({ planId, revision, config }) {
+      const data = await request("POST", `/plans/${encodeURIComponent(planId)}/compile`, { revision, config });
+      const batchDetails =
+        data.batch_details ??
+        (data.batches ?? []).map((tasks, index) => ({
+          index,
+          tasks: Array.isArray(tasks) ? tasks : tasks.tasks ?? [],
+          bindings: Array.isArray(tasks) ? {} : tasks.bindings ?? {},
+          waiting: Array.isArray(tasks) ? [] : tasks.waiting ?? [],
+        }));
+      return {
+        ...data,
+        batches: batchDetails,
+        raw_batches: data.batches,
+      };
+    },
     confirm: ({ planId, revision, execution_plan_id }) =>
-      request("POST", `/plans/${planId}/confirm`, { revision, execution_plan_id }),
-    exportPlan: ({ planId, revision }) =>
-      request("GET", `/plans/${planId}/export?revision=${revision}&format=json`),
+      request("POST", `/plans/${encodeURIComponent(planId)}/confirm`, { revision, execution_plan_id }),
+    async exportPlan({ planId, revision }) {
+      const [jsonResp, mdResp] = await Promise.all([
+        fetch(`${prefix}/plans/${encodeURIComponent(planId)}/export?revision=${encodeURIComponent(revision)}&format=json`),
+        fetch(`${prefix}/plans/${encodeURIComponent(planId)}/export?revision=${encodeURIComponent(revision)}&format=markdown`),
+      ]);
+      if (!jsonResp.ok) {
+        const err = await jsonResp.json().catch(() => null);
+        throw new ApiError(`HTTP_${jsonResp.status}`, err?.detail ?? "请先确认当前修订再导出");
+      }
+      const json = await jsonResp.text();
+      const markdown = mdResp.ok ? await mdResp.text() : "";
+      return {
+        json,
+        markdown,
+        filename: `${planId}-r${revision}.json`,
+        mdFilename: `${planId}-r${revision}.md`,
+      };
+    },
   };
 }
