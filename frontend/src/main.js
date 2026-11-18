@@ -8,7 +8,7 @@ import { mountTaskTable } from "./features/task-editor/taskTable.js";
 import { mountGraph } from "./features/workflow-graph/graphCanvas.js";
 import { canLink } from "./features/workflow-graph/canvasLinking.js";
 import { mountSpecEditor } from "./features/spec-editor/specEditor.js";
-import { parseSpecMarkdownClient } from "./features/spec-editor/gapCheck.js";
+import { gapCheck, parseSpecMarkdownClient } from "./features/spec-editor/gapCheck.js";
 
 const params = new URLSearchParams(location.search);
 let api = createApi({ mode: "fixture", base: "." });
@@ -52,6 +52,7 @@ const actions = {
   loadSample,
   importSpecText,
   checkSpec,
+  extractSpec,
   confirmSpec,
   startPlanning,
   setTemplate,
@@ -152,7 +153,44 @@ function importSpecText(content, filename = "") {
   }
   const draft = parseSpecMarkdownClient(trimmed);
   store.dispatch({ type: "SPEC_LOADED", draft, text: trimmed, source: filename || "markdown" });
-  notice("info", `已导入 Markdown 规格：${filename || "自定义文档"}`);
+  if (gapCheck(draft).errors.length && api.mode === "http" && liveLlmConfigured) {
+    extractSpec();
+  } else {
+    notice("info", `已导入设计说明书：${filename || "自定义文档"}`);
+  }
+}
+
+async function extractSpec() {
+  const state = store.getState();
+  const source = state.specText.trim();
+  if (state.busy || state.spec?.locked || !source) return;
+  if (api.mode !== "http" || !liveLlmConfigured) {
+    notice("error", "AI 整理需要已配置实时模型的后端。");
+    return;
+  }
+  store.dispatch({ type: "EXTRACTION_BUSY", busy: true });
+  notice("info", "DeepSeek 正在整理说明书并补全规划所需信息。");
+  try {
+    const result = await api.extractSpec(source);
+    if (store.getState().specText !== state.specText) return;
+    views.spec.showSource(state.specText);
+    store.dispatch({
+      type: "SPEC_LOADED", draft: result.normalized, text: result.text, source: "ai-extraction",
+    });
+    store.dispatch({ type: "SPEC_CHECKED", issues: result.issues });
+    const missing = result.issues.errors.length;
+    notice(missing ? "warn" : "info", missing
+      ? `已整理出草稿，还有 ${missing} 处缺口。请对照原文补充后再确认。`
+      : "规格已整理。请核对 AI 补充假设，再确认规格。");
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "HTTP_404") {
+      notice("error", "当前后端版本缺少 AI 整理接口。请在项目根目录重新启动后端，再打开对应端口的工作台。");
+    } else {
+      fail(error);
+    }
+  } finally {
+    store.dispatch({ type: "EXTRACTION_BUSY", busy: false });
+  }
 }
 
 async function checkSpec() {
@@ -166,6 +204,12 @@ async function checkSpec() {
     }
     store.dispatch({ type: "SPEC_CHECKED", issues: checked.issues });
     const { errors, warnings } = checked.issues;
+    if (errors.length && parsed.text && api.mode === "http" && liveLlmConfigured &&
+        store.getState().specText.trim() === parsed.text.trim() &&
+        store.getState().spec?.source !== "ai-extraction") {
+      await extractSpec();
+      return;
+    }
     if (errors.length) notice("error", `发现 ${errors.length} 个规格缺口，先修复再确认`);
     else notice("info", `规格可确认：v${checked.version}，${warnings.length} 条警告`);
   } catch (error) {
@@ -183,6 +227,12 @@ async function confirmSpec() {
       store.dispatch({ type: "SPEC_PARSED", draft: checked.normalized });
     }
     store.dispatch({ type: "SPEC_CHECKED", issues: checked.issues });
+    if (checked.issues.errors.length && parsed.text && api.mode === "http" && liveLlmConfigured &&
+        store.getState().specText.trim() === parsed.text.trim() &&
+        store.getState().spec?.source !== "ai-extraction") {
+      await extractSpec();
+      return;
+    }
     if (checked.issues.errors.length) {
       notice("error", `还有 ${checked.issues.errors.length} 个规格缺口，先修复再确认`);
       return;
