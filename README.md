@@ -11,6 +11,8 @@ python -m pip install -r backend/requirements.txt
 python -m backend
 ```
 
+自由格式说明书可粘贴到工作台，或通过「导入文件」加载 TXT / Markdown。点击「AI 整理」，原文会发送给配置好的模型，生成可编辑的说明书草稿。导入或检查自由格式说明书时，工作台会在需要时自动调用模型整理并补全需求与验收条件。模型补充的关键内容列在「AI 补充假设」。展开「查看整理前的说明书」对照原文，确认规格后生成工作流。
+
 启动后直接打开 http://127.0.0.1:8010/ （或直接进入工作台 http://127.0.0.1:8010/frontend/ ）：
 - **输入规格**：内置「聊天 MVP」「内容社区 MVP」「校园失物招领 MVP（Markdown 现场规格）」，也支持粘贴或导入任意自定义产品的 `.json` / `.md` 设计规格。
 - **工作台生成方式**：使用实时 PM Agent。启动前配置 PM_BASE_URL、PM_API_KEY、PM_MODEL。
