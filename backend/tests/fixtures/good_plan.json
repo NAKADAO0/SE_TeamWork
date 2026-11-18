@@ -1,0 +1,71 @@
+{
+  "tasks": [
+    {
+      "id": "T-MSG-I",
+      "title": "实现消息发送与存储",
+      "kind": "implementation",
+      "role": "backend",
+      "requirement_ids": ["R-MSG-01"],
+      "module_ids": ["M-MSG"],
+      "design_refs": ["I-SEND"],
+      "acceptance": ["调用发送接口返回消息 ID，重启服务后仍可查到该消息"],
+      "depends_on": [],
+      "priority": 1
+    },
+    {
+      "id": "T-MSG-V",
+      "title": "验证消息发送与查询一致",
+      "kind": "verification",
+      "role": "qa",
+      "requirement_ids": ["R-MSG-01"],
+      "module_ids": ["M-MSG"],
+      "acceptance": ["发送成功后查询会话，结果包含相同的消息 ID"],
+      "depends_on": [
+        {"task_id": "T-MSG-I", "reason": "需要可调用的发送接口实现"}
+      ],
+      "priority": 2
+    },
+    {
+      "id": "T-PAGE-I",
+      "title": "实现历史分页查询",
+      "kind": "implementation",
+      "role": "backend",
+      "requirement_ids": ["R-MSG-02"],
+      "module_ids": ["M-MSG"],
+      "design_refs": ["I-LIST"],
+      "acceptance": ["一页最多返回 20 条，游标翻页不重复也不丢条"],
+      "depends_on": [],
+      "priority": 1
+    },
+    {
+      "id": "T-PAGE-V",
+      "title": "验证分页边界",
+      "kind": "verification",
+      "role": "qa",
+      "requirement_ids": ["R-MSG-02"],
+      "module_ids": ["M-MSG"],
+      "acceptance": ["连续翻三页，条目总数为 60 条且无重复 ID"],
+      "depends_on": [
+        {"task_id": "T-PAGE-I", "reason": "需要真实分页接口返回数据"}
+      ],
+      "priority": 2
+    },
+    {
+      "id": "T-E2E",
+      "title": "会话页面端到端验证",
+      "kind": "integration",
+      "role": "qa",
+      "requirement_ids": ["R-MSG-01", "R-MSG-02"],
+      "module_ids": ["M-MSG"],
+      "acceptance": ["在会话页面发送消息并向下翻页，历史与最新消息顺序正确"],
+      "depends_on": [
+        {"task_id": "T-MSG-V", "reason": "发送链路需先验证通过"},
+        {"task_id": "T-PAGE-V", "reason": "分页链路需先验证通过"}
+      ],
+      "priority": 3
+    }
+  ],
+  "open_questions": [
+    "历史消息保留期限未在规格中说明，是否影响分页实现"
+  ]
+}

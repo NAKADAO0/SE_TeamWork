@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "完成后端",
+      "kind": "implementation",
+      "role": "backend",
+      "requirement_ids": ["R-MSG-01"],
+      "acceptance": ["完成"],
+      "depends_on": [],
+      "priority": 1
+    },
+    {
+      "id": "T2",
+      "title": "验证消息",
+      "kind": "verification",
+      "role": "qa",
+      "requirement_ids": ["R-NOT-EXIST"],
+      "depends_on": [
+        {"task_id": "T9"}
+      ],
+      "priority": 2
+    }
+  ],
+  "open_questions": []
+}

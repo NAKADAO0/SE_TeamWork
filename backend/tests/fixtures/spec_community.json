@@ -1,0 +1,39 @@
+{
+  "product": "内容社区 MVP",
+  "scope": {
+    "include": ["图文笔记发布", "内容流", "点赞", "评论"],
+    "exclude": ["直播", "推荐算法训练", "私信"]
+  },
+  "requirements": [
+    {
+      "id": "R-NOTE-01",
+      "goal": "发布图文笔记并在内容流中展示",
+      "acceptance": ["发布成功后内容流首条为刚发布的笔记"]
+    },
+    {
+      "id": "R-LIKE-01",
+      "goal": "点赞与取消点赞且计数幂等",
+      "acceptance": ["连续点击两次点赞，计数只加一", "重复请求同一用户同一笔记不重复计数"]
+    }
+  ],
+  "modules": [
+    {
+      "id": "M-NOTE",
+      "responsibility": "笔记存储与内容流组织",
+      "requirement_ids": ["R-NOTE-01"]
+    },
+    {
+      "id": "M-INTERACT",
+      "responsibility": "点赞与评论交互",
+      "requirement_ids": ["R-LIKE-01"]
+    }
+  ],
+  "design_refs": [
+    {"id": "I-PUBLISH", "type": "interface", "summary": "POST /notes 发布接口"},
+    {"id": "I-LIKE", "type": "interface", "summary": "POST /notes/{id}/like 点赞接口"}
+  ],
+  "constraints": {
+    "stack": "Python + SQLite",
+    "media": "图片先校验大小与格式再入库"
+  }
+}
