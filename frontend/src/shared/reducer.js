@@ -399,6 +399,9 @@ export function reduce(state, action) {
     case "MESSAGE":
       return { ...state, message: action.message };
 
+    case "EXTRACTION_BUSY":
+      return { ...state, busy: action.busy };
+
     case "ERROR":
       return { ...state, busy: false, message: message("error", action.message) };
 

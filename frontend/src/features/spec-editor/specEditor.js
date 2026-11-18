@@ -22,11 +22,16 @@ export function mountSpecEditor(root, { store, actions }) {
     <textarea data-role="text" spellcheck="false" aria-label="设计规格 JSON 或 Markdown"
       placeholder="粘贴 DesignSpec JSON 或 Markdown（# 产品名称 / ## 产品范围 / ## 需求条目 / ## 模块 / ## 设计条目 / ## 约束）"></textarea>
     <div class="ws-row">
+      <button type="button" data-action="extract">AI 整理</button>
       <button type="button" data-action="check">检查缺口</button>
       <button type="button" data-action="confirm">确认规格</button>
       <button type="button" data-action="reopen" hidden>修改</button>
       <button type="button" data-action="plan" class="primary">生成计划</button>
     </div>
+    <details class="studio-settings" data-role="source-panel" hidden>
+      <summary>查看整理前的说明书</summary>
+      <pre data-role="source-text"></pre>
+    </details>
     <div data-role="issues" class="ws-issues"></div>
     <p data-role="ref" class="ws-meta"></p>
     <details class="studio-settings">
@@ -64,6 +69,7 @@ export function mountSpecEditor(root, { store, actions }) {
       text.focus();
     }
     if (action === "import-file") fileInput.click();
+    if (action === "extract") actions.extractSpec();
     if (action === "check") actions.checkSpec();
     if (action === "confirm") actions.confirmSpec();
     if (action === "reopen") store.dispatch({ type: "SPEC_REOPEN" });
@@ -110,7 +116,7 @@ export function mountSpecEditor(root, { store, actions }) {
     }
     const rows = [
       ...(entries.errors ?? []).map((item) => ({ ...item, severity: "error" })),
-      ...(entries.warnings ?? []),
+
     ];
     if (!rows.length) {
       issues.innerHTML = `<p class="ok">规格信息完整，可以确认。</p>`;
@@ -120,8 +126,6 @@ export function mountSpecEditor(root, { store, actions }) {
       .map(
         (item) => `
         <p class="issue ${escapeHtml(item.severity)}">
-          <code>${escapeHtml(item.code)}</code>
-          <span class="path">${escapeHtml(item.field_path ?? "")}</span>
           ${escapeHtml(item.message)}
         </p>`,
       )
@@ -129,6 +133,10 @@ export function mountSpecEditor(root, { store, actions }) {
   }
 
   return {
+    showSource(source) {
+      root.querySelector('[data-role="source-panel"]').hidden = false;
+      root.querySelector('[data-role="source-text"]').textContent = source;
+    },
     setTemplates(list) {
       templates = list;
       template.innerHTML = list
@@ -144,7 +152,9 @@ export function mountSpecEditor(root, { store, actions }) {
         lastToken = state.specToken;
       }
       const locked = Boolean(state.spec?.locked);
-      text.readOnly = locked;
+      text.readOnly = locked || state.busy;
+      button("extract").disabled = state.busy || locked || !state.specText.trim();
+      button("import-file").disabled = state.busy || locked;
       button("check").disabled = state.busy || !state.specText.trim();
       button("confirm").disabled = state.busy || locked || !state.specText.trim();
       button("plan").disabled = state.busy || !locked;
