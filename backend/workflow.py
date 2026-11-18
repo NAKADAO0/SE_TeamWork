@@ -173,6 +173,23 @@ def workflow_router(store, planner=None):
         draft.pop("_source_format", None)
         return {"name": name, "format": "markdown", "draft": draft, "text": text}
 
+    class ExtractionRequest(BaseModel):
+        text: str = Field(min_length=1, max_length=30000)
+
+    @router.post("/specs/extract")
+    def extract(request: ExtractionRequest):
+        from .app.planner.spec_extraction import extract_spec
+        from .app.planner.models import ProviderError
+
+        if not request.text.strip():
+            raise HTTPException(422, detail="请先输入或导入设计说明书")
+        if not live_llm_env_ready():
+            raise HTTPException(503, detail="请先配置实时模型")
+        try:
+            return extract_spec(request.text)
+        except (ProviderError, ValueError) as exc:
+            raise HTTPException(502, detail=str(exc)) from exc
+
     @router.post("/specs", status_code=201)
     def submit(payload: dict[str, Any]):
         try:

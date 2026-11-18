@@ -21,6 +21,45 @@ class EndToEndWorkflowTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.db_path = Path(temp.name) / "e2e.sqlite3"
 
+    def test_ai_extraction_completes_missing_acceptance_in_one_repair(self):
+        markdown = """# 实验室预约
+
+## 产品范围
+
+学生按日期预约空闲实验室。
+
+- 提交预约
+
+明确排除：
+
+- 付费
+
+## 需求条目
+
+| 编号 | 行为描述 | 验收条件 |
+| --- | --- | --- |
+| REQ-001 | 学生提交预约 | |
+"""
+        with patch.dict("os.environ", {
+            "PM_BASE_URL": "http://mock-model.local", "PM_API_KEY": "test", "PM_MODEL": "test",
+        }), patch("backend.app.planner.providers.HttpProvider.complete",
+                  side_effect=[
+                      json.dumps({"markdown": markdown}),
+                      json.dumps({"markdown": markdown.replace("| 学生提交预约 | |", "| 学生提交预约 | 返回预约编号 |")
+                                  + "\n## AI 补充假设\n\n- REQ-001：返回预约编号。"}),
+                  ]) as complete:
+            with TestClient(create_app(self.db_path)) as client:
+                source = "项目名称：实验室预约。学生提交预约。"
+                response = client.post("/specs/extract", json={"text": source})
+                response.raise_for_status()
+                draft = response.json()
+                self.assertIn("AI 补充假设", draft["text"])
+                self.assertEqual(draft["normalized"]["requirements"][0]["id"], "REQ-001")
+                self.assertEqual(draft["issues"]["errors"], [])
+                self.assertEqual(complete.call_count, 2)
+                self.assertNotIn("spec_id", draft)
+                self.assertEqual(json.loads(complete.call_args.args[0][1]["content"])["source_document"], source)
+
     def test_three_products_json_and_markdown_end_to_end(self):
         chat_spec = json.loads((ROOT / "examples/contracts/chat/design-spec.json").read_text(encoding="utf-8"))
         community_spec = json.loads((ROOT / "examples/contracts/community/design-spec.json").read_text(encoding="utf-8"))
