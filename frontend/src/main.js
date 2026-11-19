@@ -654,8 +654,7 @@ async function resolveApi() {
   const apiParam = params.get("api");
   if (apiParam === "fixture") return createApi({ mode: "fixture", base: "." });
   if (apiParam === "http") {
-    const base = location.port === "8010" || !location.port ? "" : "http://127.0.0.1:8010";
-    return createApi({ mode: "http", base });
+    return createApi({ mode: "http", base: "" });
   }
   if (apiParam && /^https?:\/\//i.test(apiParam)) {
     return createApi({ mode: "http", base: apiParam });

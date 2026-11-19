@@ -1,8 +1,7 @@
 // Adapt member 5's saved plans and execution snapshots for the graph view.
 export async function loadRemoteGraph(params) {
   const configured = params.get('api');
-  const defaultBase = location.port === '8010' || !location.port ? '' : 'http://127.0.0.1:8010';
-  const base = (configured === 'http' ? defaultBase : configured).replace(/\/$/, '');
+  const base = (configured === 'http' ? '' : configured).replace(/\/$/, '');
   async function read(path) {
     let response;
     try { response = await fetch(`${base}${path}`); }
