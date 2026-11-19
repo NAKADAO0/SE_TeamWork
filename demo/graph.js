@@ -3,6 +3,8 @@ import { topologicalLevels, findCycle } from '../frontend/src/shared/graph.js';
 import { loadRemoteGraph } from './graph-api.js';
 import { exampleVersions } from './graph-versions.js';
 import { sampleProgress } from './graph-progress.js';
+import { rememberGraph } from './graph-navigation.js';
+import { updateGraphLinks } from './site-navigation.js';
 const canvas = document.querySelector('#canvas');
 const view = document.querySelector('#graph-view');
 const toggle = document.querySelector('#fullscreen');
@@ -68,6 +70,12 @@ async function show() {
     location.href = url.href;
   });
   if (remote && !plan.batches?.length) throw new Error(`修订 r${plan.revision} 尚未编排，请先在工作台编排`);
+  const currentUrl = new URL(location.href);
+  if (remote) currentUrl.searchParams.set('plan_id', remote.planId);
+  else currentUrl.searchParams.set('sample', preview ? sample : 'current');
+  currentUrl.searchParams.set('revision', plan.revision ?? 1);
+  try { rememberGraph(currentUrl, sessionStorage); } catch { /* Storage is optional. */ }
+  updateGraphLinks();
   const metadata = preview ? sampleProgress[sample] : null;
   const execution = metadata?.execution ?? {};
   const statusOf = id => Object.hasOwn(taskStates, execution[id]?.status) ? execution[id].status : 'unknown';
