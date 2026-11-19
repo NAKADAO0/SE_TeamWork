@@ -3,7 +3,7 @@ from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 import json
 import os
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -175,6 +175,8 @@ def workflow_router(store, planner=None):
 
     class ExtractionRequest(BaseModel):
         text: str = Field(min_length=1, max_length=30000)
+        stage: Literal["scope", "full"] = "full"
+        confirmed_scope: str | None = Field(default=None, max_length=60000)
 
     @router.post("/specs/extract")
     def extract(request: ExtractionRequest):
@@ -186,7 +188,7 @@ def workflow_router(store, planner=None):
         if not live_llm_env_ready():
             raise HTTPException(503, detail="请先配置实时模型")
         try:
-            return extract_spec(request.text)
+            return extract_spec(request.text, request.stage, request.confirmed_scope)
         except (ProviderError, ValueError) as exc:
             raise HTTPException(502, detail=str(exc)) from exc
 

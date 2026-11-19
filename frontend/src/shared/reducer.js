@@ -29,9 +29,12 @@ export function initialState() {
   return {
     phase: PHASE.SPEC_DRAFT,
     specText: "",
+    sourceText: "",
+    specParts: null,
     specToken: 0,
     spec: null,
     specIssues: null,
+    extraction: null,
     templateId: "default",
     generationMode: "live_llm",
     config: { max_concurrency: 2, role_capacity: { backend: 1, frontend: 1, qa: 1 } },
@@ -85,11 +88,31 @@ function replaceTask(plan, taskId, patch) {
 
 export function reduce(state, action) {
   switch (action.type) {
+    case "SOURCE_TEXT_CHANGE":
+      return {
+        ...state,
+        sourceText: action.text,
+        specText: state.extraction ? state.specText : action.text,
+        specParts: state.extraction ? state.specParts : null,
+        spec: state.spec ? { ...state.spec, locked: false, ref: null } : null,
+        extraction: state.extraction ? { ...state.extraction, source: action.text, stage: "scope" } : null,
+        specIssues: null,
+        phase: PHASE.SPEC_DRAFT,
+        stale: Boolean(state.plan),
+      };
+
+    case "SCOPE_TEXT_CHANGE":
+      return {
+        ...reduce(state, { type: "SPEC_TEXT_CHANGE", text: action.text, parts: action.parts }),
+        extraction: { ...state.extraction, source: state.sourceText || state.extraction?.source || "", stage: "scope" },
+      };
+
     case "SPEC_TEXT_CHANGE": {
       const spec = state.spec ? { ...state.spec, locked: false } : null;
       return {
         ...state,
         specText: action.text,
+        specParts: action.parts ?? null,
         spec,
         specIssues: null,
         phase: PHASE.SPEC_DRAFT,
@@ -133,6 +156,11 @@ export function reduce(state, action) {
       const productName = typeof draft?.product === "string" ? draft.product : draft?.product?.name;
       return {
         ...state,
+        sourceText: action.extraction?.source ?? (
+          /^(?:\s*[\[{]|##\s+(?:产品范围|需求条目))/m.test(action.text ?? "") ? "" : action.text ?? ""
+        ),
+        specParts: null,
+        extraction: action.extraction ?? null,
         specText: action.text ?? JSON.stringify(draft, null, 2),
         specToken: state.specToken + 1,
         spec: { draft, locked: false, ref: null, source: action.source ?? "" },

@@ -222,7 +222,7 @@ function createHttpApi(base) {
       const res = await request("GET", "/plans/chat-demo");
       return res.plan ?? res;
     },
-    extractSpec: (text) => request("POST", "/specs/extract", { text }),
+    extractSpec: (text, options = {}) => request("POST", "/specs/extract", { text, ...options }),
     submitSpec: ({ draft, text }) =>
       request("POST", "/specs", draft !== undefined && draft !== null ? { draft } : { text }),
     confirmSpec: ({ specId, version }) =>
