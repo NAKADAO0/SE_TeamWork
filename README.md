@@ -11,7 +11,7 @@ python -m pip install -r backend/requirements.txt
 python -m backend
 ```
 
-自由格式说明书可粘贴到工作台，或通过「导入文件」加载 TXT / Markdown。点击「AI 整理」，原文会发送给配置好的模型，生成可编辑的说明书草稿。导入或检查自由格式说明书时，工作台会在需要时自动调用模型整理并补全需求与验收条件。模型补充的关键内容列在「AI 补充假设」。展开「查看整理前的说明书」对照原文，确认规格后生成工作流。
+自由格式说明书可粘贴到工作台，或通过「导入文件」加载 TXT / Markdown。点击「AI_Review」，原文会发送给配置好的模型，生成可编辑的说明书草稿。导入或检查自由格式说明书时，工作台会在需要时自动调用模型整理并补全需求与验收条件。模型补充的关键内容列在「AI 补充假设」。展开「对照 Review 前的原文」对照原文，确认规格后生成工作流。
 
 启动后直接打开 http://127.0.0.1:8010/ （或直接进入工作台 http://127.0.0.1:8010/frontend/ ）：
 - **输入规格**：内置「聊天 MVP」「内容社区 MVP」「校园失物招领 MVP（Markdown 现场规格）」，也支持粘贴或导入任意自定义产品的 `.json` / `.md` 设计规格。
@@ -21,10 +21,10 @@ python -m backend
   - `python -m unittest discover -s backend/tests -t . -v`（契约、校验器、PM 规划与编排器单元测试）
   - `npm test`（前端状态机、缺口检查、依赖连线、排批与视图测试）
 
-### 审查与人工审核演示
+### 审查中心的离线演示
 
 1. 通过后台服务打开工作台。生成并编排任务后，在「执行编排」点击「确认版本」。
-2. 在批次下方提交开发产物。可以提交模拟通过报告，也可以模拟阻断或超时，观察返工和重试。
+2. 切到「审查中心」并提交演示开发产物。可以提交模拟通过报告，也可以模拟阻断或超时，观察返工和重试。
 3. 自动门禁通过后显示「待人工审核」。填写意见，选择批准、要求修改或拒绝；只有批准会解除下游审核阻塞。
 4. 提交下一版，检查之前的放行立即失效。历史轮次仍可以查看，刷新页面后状态从 SQLite 恢复。
 
@@ -115,3 +115,19 @@ python -m uvicorn backend.api:app --host 127.0.0.1 --port 8010
 运行 `python -m unittest discover -s tests -p 'test_*.py'` 检查版本隔离、读接口、并发保存与完整工作流；`npm test` 检查前端现有规则。
 
 图谱一致性回归覆盖 JSON/Markdown 导出、任务与依赖边、执行批次、报告引用，以及修改容量和依赖后历史修订在服务重启前后的稳定性；已由现有 Plan API CI 自动发现并执行。
+
+## Lab2 AI_Review、人工 Review 与验收记录
+
+- 规格编辑页的「AI_Review」调用 DeepSeek 检查设计说明书，给出按章节定位的问题、建议和可编辑修订稿。可以对照原文；人工 Review 后才确认规格。
+- 「审查中心」接收用户主动提供的提交 SHA 与代码差异。真实轮由 DeepSeek 生成规范、逻辑和依赖三类报告；模拟报告不能写入真实轮。服务端规则判定是否进入人工 Review，后者可以批准、要求修改或拒绝。
+- 审核记录绑定计划修订、提交 SHA 及所提交差异的摘要。差异由用户提供，原型不会向 GitHub 核验其与 SHA 的对应关系。不会执行代码、测试或自动合并。
+- [长篇校园实验设备预约 DesignSpec](examples/campus-device-reservation/design-spec.md) 可用于复测。脚本 `examples/campus-device-reservation/run_live.py` 在新目录保存原文、模型报告、TaskPlan、ExecutionPlan 和 SQLite 阶段快照。
+
+从仓库根目录执行，使用新的记录路径：
+
+```powershell
+$env:PYTHONPATH = (Get-Location).Path
+python examples/campus-device-reservation/run_live.py --out ..\Lab2\output\DeepSeek验收\新运行目录
+```
+
+复原时应复制快照到独立数据库，不要覆盖在用数据库。用 `PLAN_DB` 指向该副本并以空闲端口启动。随后访问 `/frontend/?plan=计划ID&revision=修订号` 重开已确认快照；加 `&stage=flow` 切到执行图谱。
