@@ -215,6 +215,10 @@ function createHttpApi(base) {
   return {
     mode: "http",
     base: prefix,
+    getReview: (planId, revision) =>
+      request("GET", `/plans/${encodeURIComponent(planId)}/review?revision=${encodeURIComponent(revision)}`),
+    updateReview: (planId, action, body) =>
+      request("POST", `/plans/${encodeURIComponent(planId)}/review${action ? `/${action}` : ""}`, body),
     loadHealth: () => request("GET", "/health"),
     loadTemplates: () => request("GET", "/templates"),
     loadSpecSample: (name = "chat") => request("GET", `/specs/sample/${encodeURIComponent(name)}`),

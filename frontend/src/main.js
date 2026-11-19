@@ -1,3 +1,4 @@
+import { mountReview } from "./features/review/reviewPanel.js";
 import { createApi, ApiError } from "./shared/api.js";
 import { download } from "./shared/dom.js";
 import { PHASE, PHASE_LABEL, initialState, reduce } from "./shared/reducer.js";
@@ -51,6 +52,7 @@ function showStage(next) {
   }
   for (const panel of panels) panel.hidden = panel.dataset.stagePanel !== next;
   saveSession();
+  updateReview();
 }
 
 for (const button of stages) {
@@ -81,6 +83,8 @@ const actions = {
   link,
   unlink,
 };
+
+const review = mountReview(document.querySelector('[data-view="review"]'));
 
 const views = {
   spec: mountSpecEditor(document.querySelector('[data-view="spec"]'), { store, actions }),
@@ -595,6 +599,11 @@ const MODE_LABEL = {
   curated_example: "预编排案例",
 };
 
+function updateReview() {
+  const state = store.getState();
+  if (stage !== "flow") return;
+  review.update(api, state.phase === PHASE.PLAN_CONFIRMED && !state.stale ? state.plan : null);
+}
 function render(state) {
   phaseEl.textContent = PHASE_LABEL[state.phase] ?? state.phase;
   phaseEl.dataset.phase = state.phase;
@@ -628,6 +637,7 @@ function render(state) {
 
   for (const view of Object.values(views)) view.update(state);
   renderVersions(state);
+  updateReview();
 }
 
 store.subscribe((state) => {

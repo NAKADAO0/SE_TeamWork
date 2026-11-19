@@ -543,3 +543,25 @@ button.active {
 .studio-sample-options {position:absolute;z-index:5;top:calc(100% + 6px);left:0;min-width:190px;display:grid;padding:6px;background:#fff;border:1px solid #dce3ee;border-radius:10px;box-shadow:0 8px 20px #152c5320}
 .studio-sample-options button {background:white;color:#243756;text-align:left;white-space:nowrap}
 .studio-sample-options button:hover,.studio-sample-options button:focus-visible {background:#eef4ff}
+
+/* Review gates are part of the execution stage, below the dependency map. */
+[data-view="review"] {
+  border-top: 1px solid #dde5ee;
+  padding: 24px;
+}
+[data-view="review"] h2 { margin: 0 0 8px; font-size: 1.15rem; }
+[data-view="review"] p { margin: 8px 0; overflow-wrap: anywhere; }
+.review-note { color: #526376; font-size: .9rem; }
+.review-status {
+  display: inline-block; padding: 5px 10px; border-radius: 6px;
+  background: #eff1ff; color: #3e4190; font-weight: 650;
+}
+.review-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 12px 0; }
+.review-check, .review-decision { padding: 14px; border: 1px solid #dde5ee; border-radius: 10px; }
+.review-check h3 { margin: 0; font-size: .95rem; }
+.review-decision textarea { display: block; width: 100%; min-height: 80px; height: 84px; margin: 8px 0; font: inherit; resize: vertical; }
+[data-view="review"] .ws-actions { flex-wrap: wrap; }
+.review-flow { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 16px 0 10px; }
+.review-flow li { color: #526376; display: flex; align-items: center; gap: 8px; font-size: .88rem; }
+.review-flow li + li::before { content: "→"; color: #718298; }
+.review-flow li[aria-current="step"] { color: #3652a1; font-weight: 750; }
