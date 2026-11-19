@@ -163,6 +163,12 @@ class EndToEndWorkflowTests(unittest.TestCase):
             for route in ("/", "/health", "/frontend/", "/graph.html", "/examples.html", "/guide.html"):
                 self.assertEqual(client.get(route).status_code, 200, route)
 
+            legacy = client.get("/workspace.html?api=http", follow_redirects=False)
+            self.assertEqual(legacy.status_code, 307)
+            self.assertEqual(legacy.headers["location"], "/frontend/?api=http")
+            for route in ("/", "/frontend/", "/frontend/src/main.js", "/frontend/src/workspace.css"):
+                self.assertEqual(client.get(route).headers["cache-control"], "no-cache")
+
             # 样例回放模式保留 fixture_replay 标识
             sid = client.post("/specs", json={"draft": chat_spec}).json()["spec_id"]
             client.post(f"/specs/{sid}/confirm", json={"expected_version": 1}).raise_for_status()

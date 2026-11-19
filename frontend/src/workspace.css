@@ -13,8 +13,14 @@
 
 @media (max-width: 900px) {
   .ws-main {
-    margin-left: 66px;
     padding: 16px 12px;
+  }
+}
+
+/* Match the compact sidebar breakpoint in demo/site.css. */
+@media (max-width: 720px) {
+  .ws-main {
+    margin-left: 66px;
   }
 }
 
@@ -375,6 +381,10 @@ button.active {
 
 .ws-graph {
   position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid #d8e0ec;
   border-radius: 12px;
   background-color: #fbfcff;
@@ -382,6 +392,10 @@ button.active {
   background-size: 16px 16px;
   height: 320px;
   overflow: auto;
+}
+
+.ws-graph-canvas {
+  position: relative;
 }
 
 .ws-graph svg {

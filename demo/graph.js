@@ -3,6 +3,8 @@ import { topologicalLevels, findCycle } from '../frontend/src/shared/graph.js';
 import { loadRemoteGraph } from './graph-api.js';
 import { exampleVersions } from './graph-versions.js';
 import { sampleProgress } from './graph-progress.js';
+import { rememberGraph } from './graph-navigation.js';
+import { updateGraphLinks } from './site-navigation.js';
 const canvas = document.querySelector('#canvas');
 const view = document.querySelector('#graph-view');
 const toggle = document.querySelector('#fullscreen');
@@ -68,6 +70,12 @@ async function show() {
     location.href = url.href;
   });
   if (remote && !plan.batches?.length) throw new Error(`修订 r${plan.revision} 尚未编排，请先在工作台编排`);
+  const currentUrl = new URL(location.href);
+  if (remote) currentUrl.searchParams.set('plan_id', remote.planId);
+  else currentUrl.searchParams.set('sample', preview ? sample : 'current');
+  currentUrl.searchParams.set('revision', plan.revision ?? 1);
+  try { rememberGraph(currentUrl, sessionStorage); } catch { /* Storage is optional. */ }
+  updateGraphLinks();
   const metadata = preview ? sampleProgress[sample] : null;
   const execution = metadata?.execution ?? {};
   const statusOf = id => Object.hasOwn(taskStates, execution[id]?.status) ? execution[id].status : 'unknown';
@@ -97,7 +105,7 @@ async function show() {
   phases.forEach((phase, pi) => phase.tasks.forEach((id, ti) => labels.set(id, `Task ${pi + 1}.${ti + 1}`)));
   const countEdges = tasks.reduce((sum, task) => sum + deps(task).length, 0);
   document.querySelector('#summary').textContent = `${preview ? '样例预览' : remote ? '服务端计划' : '当前本地计划'} · ${productName} · ${tasks.length} 个任务 · ${countEdges} 条依赖 · ${batches.length} 个批次${plan.revision ? ` · 修订 r${plan.revision}` : ''}`;
-  if (!preview) document.querySelector('#return-link').href = remote || plan.source === 'workspace' ? 'frontend/' : 'workspace.html';
+  if (!preview) document.querySelector('#return-link').href = 'frontend/';
   const percent = Math.round(done.size / tasks.length * 100);
   document.querySelector('#progress').innerHTML = `<div class="progress-heading"><h2>总开发进度</h2>${preview ? '' : '<span class="execution-unavailable">暂无数据</span>'}</div><div class="total-value">${preview ? `${done.size}/${tasks.length}` : '—'} <small>${preview ? `已完成 · ${percent}%` : '未完成'}</small></div>${preview ? `<progress value="${done.size}" max="${tasks.length}" aria-label="模拟总开发进度"></progress>` : ''}`;
   const list = document.querySelector('#task-list');

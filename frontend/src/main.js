@@ -12,7 +12,15 @@ import { gapCheck, parseSpecMarkdownClient } from "./features/spec-editor/gapChe
 
 const params = new URLSearchParams(location.search);
 let api = createApi({ mode: "fixture", base: "." });
-const store = createStore(initialState(), reduce);
+const sessionKey = `se.workspace.v1:${params.get("api") ?? "auto"}`;
+let restored = null;
+try {
+  const saved = JSON.parse(sessionStorage.getItem(sessionKey));
+  if (saved?.state && !saved.state.busy && Object.values(PHASE).includes(saved.state.phase)) restored = saved;
+} catch {
+  // 浏览器禁用存储或旧快照损坏时正常打开空白工作台。
+}
+const store = createStore({ ...initialState(), ...restored?.state }, reduce);
 
 let templates = [];
 let liveLlmConfigured = false;
@@ -23,7 +31,17 @@ const messageEl = document.querySelector('[data-role="message"]');
 const versionsEl = document.querySelector('[data-role="versions"]');
 const stages = [...document.querySelectorAll("[data-stage]")];
 const panels = [...document.querySelectorAll("[data-stage-panel]")];
-let stage = "spec";
+let stage = restored?.state?.plan && ["spec", "tasks", "flow"].includes(restored.stage) ? restored.stage : "spec";
+
+function saveSession() {
+  const state = store.getState();
+  if (state.busy) return;
+  try {
+    sessionStorage.setItem(sessionKey, JSON.stringify({ state, stage }));
+  } catch {
+    // 存储空间不足时仍允许正常编辑与导航。
+  }
+}
 
 function showStage(next) {
   stage = next;
@@ -32,6 +50,7 @@ function showStage(next) {
     else button.removeAttribute("aria-current");
   }
   for (const panel of panels) panel.hidden = panel.dataset.stagePanel !== next;
+  saveSession();
 }
 
 for (const button of stages) {
@@ -611,8 +630,12 @@ function render(state) {
   renderVersions(state);
 }
 
-store.subscribe(render);
+store.subscribe((state) => {
+  render(state);
+  saveSession();
+});
 render(store.getState());
+showStage(stage);
 
 async function resolveApi() {
   const apiParam = params.get("api");
