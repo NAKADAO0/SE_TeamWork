@@ -151,3 +151,32 @@ test("依赖图渲染节点与连线", () => {
   assert.match(board.innerHTML, /C1/);
   assert.match(svg.innerHTML, /ws-edge/);
 });
+
+test("范围编辑阶段只确认范围，生成后恢复规格确认并支持返回修改", () => {
+  const store = createStore(initialState(), reduce);
+  const root = new StubElement();
+  const view = mountSpecEditor(root, { store, actions: noopActions });
+  const button = (name) => root.querySelector(`[data-action="${name}"]`);
+  store.dispatch({
+    type: "SPEC_LOADED", text: "# 产品\n## 产品范围\n- 提交预约", draft: {},
+    extraction: { stage: "scope", source: "原始说明" },
+  });
+  store.dispatch({ type: "SPEC_TEXT_CHANGE", text: "# 产品\n## 产品范围\n- 仅学生可提交预约" });
+  assert.equal(store.getState().extraction.source, "原始说明");
+  view.update(store.getState());
+  assert.equal(button("confirm-scope").textContent, "确认范围并生成规格");
+  assert.equal(button("confirm").disabled, true);
+  assert.equal(button("plan").hidden, false);
+  assert.equal(root.querySelector('[data-role="text"]').readOnly, false);
+  store.dispatch({
+    type: "SPEC_LOADED", draft: clone(specDraft),
+    extraction: { stage: "full", source: "原始说明", confirmedScope: store.getState().specText },
+  });
+  view.update(store.getState());
+  assert.equal(button("confirm").textContent, "人工 Review · 确认规格");
+  assert.equal(button("plan").hidden, false);
+  assert.equal(button("plan").disabled, true);
+  assert.equal(button("reopen-scope").hidden, false);
+  store.dispatch({ type: "SPEC_LOADED", draft: clone(specDraft) });
+  assert.equal(store.getState().extraction, null);
+});

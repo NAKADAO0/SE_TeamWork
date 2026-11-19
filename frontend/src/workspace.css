@@ -573,3 +573,14 @@ button.active {
 .review-submission :is(input,textarea),.review-decision input{display:block;width:100%;padding:7px;margin-top:4px;border:1px solid #ccd7e8;border-radius:8px}
 .review-submission textarea{min-height:120px}
 [data-view="review"]>h3{margin:18px 0 8px}
+
+/* Place each AI action at the right edge of its editor heading. */
+.spec-input-section { margin-top: 20px; }
+.spec-input-section > label { display: block; margin-bottom: 8px; font-weight: 600; }
+.spec-input-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+.spec-input-heading > label { font-weight: 600; min-width: 0; }
+.spec-input-heading > button { flex-shrink: 0; }
+.studio-sheet .spec-input-section textarea { min-height: 210px; resize: vertical; }
+.studio-sheet .spec-input-section textarea[data-role="source"] { min-height: 150px; font-family: inherit; }
+.studio-sheet .spec-input-section textarea[data-role="text"] { min-height: 320px; }
+.spec-input-section textarea[readonly] { background: #f1f3f8; color: #5a6b80; }

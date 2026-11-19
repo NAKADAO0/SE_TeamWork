@@ -1,3 +1,4 @@
+import { splitSpecText, joinSpecText } from "../../shared/specText.js";
 import { escapeHtml } from "../../shared/dom.js";
 
 /**
@@ -19,19 +20,36 @@ export function mountSpecEditor(root, { store, actions }) {
       <button type="button" data-action="import-file">导入文件</button>
       <input type="file" data-role="file" accept=".json,.md,.markdown,.txt" hidden>
     </div>
-    <textarea data-role="text" spellcheck="false" aria-label="设计规格 JSON 或 Markdown"
-      placeholder="粘贴 DesignSpec JSON 或 Markdown（# 产品名称 / ## 产品范围 / ## 需求条目 / ## 模块 / ## 设计条目 / ## 约束）"></textarea>
+    <div class="spec-input-section">
+      <div class="spec-input-heading">
+        <label for="spec-source">自然语言需求</label>
+        <button type="button" data-action="extract" class="primary">AI_Review · 生成范围</button>
+      </div>
+      <textarea id="spec-source" data-role="source" spellcheck="false"
+        placeholder="描述你想做的产品、功能和限制；输入 / 可选择样例。"></textarea>
+    </div>
+    <div class="spec-input-section">
+      <div class="spec-input-heading">
+        <label for="spec-scope">产品范围与明确排除</label>
+        <button type="button" data-action="confirm-scope">确认范围并生成规格</button>
+      </div>
+      <textarea id="spec-scope" data-role="scope" spellcheck="false"
+        placeholder="第一次整理的结果显示在这里，可直接修改。"></textarea>
+    </div>
+    <div class="spec-input-section">
+      <label for="spec-remaining">其余设计规格</label>
+      <textarea id="spec-remaining" data-role="text" spellcheck="false"
+        placeholder="确认范围后生成需求条目、模块、设计条目和约束，可直接修改。"></textarea>
+    </div>
     <div class="ws-row">
       <button type="button" data-action="extract" class="primary">AI_Review</button>
+      <button type="button" data-action="review-full" class="primary">AI_Review · 完整规格</button>
       <button type="button" data-action="check">检查缺口</button>
       <button type="button" data-action="confirm">人工 Review · 确认规格</button>
       <button type="button" data-action="reopen" hidden>修改</button>
+      <button type="button" data-action="reopen-scope" hidden>修改范围</button>
       <button type="button" data-action="plan" class="primary">生成计划</button>
     </div>
-    <details class="studio-settings" data-role="source-panel" hidden>
-      <summary>对照 Review 前的原文</summary>
-      <pre data-role="source-text"></pre>
-    </details>
     <section class="spec-review-report" data-role="spec-review" hidden aria-label="规格 AI_Review 报告"></section>
     <div data-role="issues" class="ws-issues"></div>
     <p data-role="ref" class="ws-meta"></p>
@@ -47,13 +65,14 @@ export function mountSpecEditor(root, { store, actions }) {
 
   const samples = root.querySelector('[data-role="sample-menu"]');
   const fileInput = root.querySelector('[data-role="file"]');
+  const source = root.querySelector('[data-role="source"]');
+  const scope = root.querySelector('[data-role="scope"]');
   const text = root.querySelector('[data-role="text"]');
   const issues = root.querySelector('[data-role="issues"]');
   const ref = root.querySelector('[data-role="ref"]');
   const template = root.querySelector('[data-role="template"]');
   const button = (name) => root.querySelector(`[data-action="${name}"]`);
 
-  let lastToken = -1;
   let templates = [];
 
   root.addEventListener("click", (event) => {
@@ -67,10 +86,13 @@ export function mountSpecEditor(root, { store, actions }) {
         if (state.busy || state.spec?.locked) return;
         actions.loadSample(target.dataset.sample);
       }
-      text.focus();
+      source.focus();
     }
     if (action === "import-file") fileInput.click();
     if (action === "extract") actions.extractSpec();
+    if (action === "review-full") actions.extractSpec("full");
+    if (action === "confirm-scope") actions.generateRemainingSpec();
+    if (action === "reopen-scope") actions.reopenScope();
     if (action === "check") actions.checkSpec();
     if (action === "confirm") actions.confirmSpec();
     if (action === "reopen") store.dispatch({ type: "SPEC_REOPEN" });
@@ -85,13 +107,13 @@ export function mountSpecEditor(root, { store, actions }) {
     actions.importSpecText(content, file.name);
   });
 
-  text.addEventListener("keydown", (event) => {
+  source.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !samples.hidden) {
       samples.hidden = true;
       return;
     }
     if (event.key === "/" && !event.isComposing && !event.ctrlKey && !event.metaKey &&
-        !text.readOnly && !store.getState().busy && !text.value.trim()) {
+        !source.readOnly && !store.getState().busy && !source.value.trim()) {
       event.preventDefault();
       samples.hidden = false;
       samples.querySelector("button").focus();
@@ -100,12 +122,18 @@ export function mountSpecEditor(root, { store, actions }) {
   samples.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !samples.hidden) {
       samples.hidden = true;
-      text.focus();
+      source.focus();
     }
   });
 
+  source.addEventListener("input", () => {
+    store.dispatch({ type: "SOURCE_TEXT_CHANGE", text: source.value });
+  });
+  scope.addEventListener("input", () => {
+    store.dispatch({ type: "SCOPE_TEXT_CHANGE", text: joinSpecText(scope.value, text.value), parts: { scope: scope.value, remaining: text.value } });
+  });
   text.addEventListener("input", () => {
-    store.dispatch({ type: "SPEC_TEXT_CHANGE", text: text.value });
+    store.dispatch({ type: "SPEC_TEXT_CHANGE", text: joinSpecText(scope.value, text.value), parts: { scope: scope.value, remaining: text.value } });
   });
 
   template.addEventListener("change", () => actions.setTemplate(template.value));
@@ -120,7 +148,7 @@ export function mountSpecEditor(root, { store, actions }) {
 
     ];
     if (!rows.length) {
-      issues.innerHTML = `<p class="ok">规格信息完整，可以确认。</p>`;
+      issues.innerHTML = `<p class="ok">${state.extraction?.stage === "scope" ? "范围信息完整，可以确认并生成其余规格。" : "规格信息完整，可以确认。"}</p>`;
       return;
     }
     issues.innerHTML = rows
@@ -135,8 +163,8 @@ export function mountSpecEditor(root, { store, actions }) {
 
   return {
     showSource(source) {
-      root.querySelector('[data-role="source-panel"]').hidden = false;
-      root.querySelector('[data-role="source-text"]').textContent = source;
+      // Original input stays visible in the first editor.
+      root.querySelector('[data-role="source"]').value = source;
     },
     setTemplates(list) {
       templates = list;
@@ -148,16 +176,28 @@ export function mountSpecEditor(root, { store, actions }) {
         .join("");
     },
     update(state) {
-      if (lastToken !== state.specToken) {
-        text.value = state.specText;
-        lastToken = state.specToken;
-      }
       const locked = Boolean(state.spec?.locked);
-      text.readOnly = locked || state.busy;
-      button("extract").disabled = state.busy || locked || !state.specText.trim();
+      const scopeStage = state.extraction?.stage === "scope";
+      const sourceValue = state.sourceText || state.extraction?.source || "";
+      const parts = !state.extraction && sourceValue === state.specText
+        ? { scope: "", remaining: "" } : state.specParts ?? splitSpecText(state.specText);
+      // Avoid replacing the active editor's value and moving its caret on each keystroke.
+      if (source.value !== sourceValue) source.value = sourceValue;
+      if (scope.value.trim() !== parts.scope.trim()) scope.value = parts.scope;
+      if (text.value.trim() !== parts.remaining.trim()) text.value = parts.remaining;
+      button("confirm").textContent = "人工 Review · 确认规格";
+      button("plan").hidden = false;
+      button("reopen-scope").hidden = !state.extraction?.confirmedScope || scopeStage;
+      button("reopen-scope").disabled = state.busy;
+      source.readOnly = scope.readOnly = text.readOnly = locked || state.busy;
+      button("extract").disabled = state.busy || locked || !sourceValue.trim();
+      button("review-full").disabled = state.busy || locked || scopeStage || !parts.remaining.trim();
+      button("confirm-scope").disabled = state.busy || locked || !parts.scope.trim();
+      button("confirm-scope").textContent = state.busy && scopeStage
+        ? "正在生成…" : "确认范围并生成规格";
       button("import-file").disabled = state.busy || locked;
       button("check").disabled = state.busy || !state.specText.trim();
-      button("confirm").disabled = state.busy || locked || !state.specText.trim();
+      button("confirm").disabled = state.busy || locked || scopeStage || !parts.remaining.trim();
       button("plan").disabled = state.busy || !locked;
       button("reopen").hidden = !locked;
       template.disabled = state.busy;
@@ -174,7 +214,7 @@ export function mountSpecEditor(root, { store, actions }) {
         ? `已确认：${state.spec.ref.spec_id} v${state.spec.ref.version}（只读）`
         : locked
           ? "规格已冻结"
-          : "规格未确认，生成前需要先确认";
+          : scopeStage ? "请核对产品范围和明确排除项，可直接修改" : "规格未确认，生成前需要先确认";
 
       const report = root.querySelector('[data-role="spec-review"]');
       report.hidden = !state.specReview;

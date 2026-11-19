@@ -1,4 +1,5 @@
 import { mountReview } from "./features/review/reviewPanel.js";
+import { splitSpecText } from "./shared/specText.js";
 import { createApi, ApiError } from "./shared/api.js";
 import { download } from "./shared/dom.js";
 import { PHASE, PHASE_LABEL, initialState, reduce } from "./shared/reducer.js";
@@ -74,6 +75,8 @@ const actions = {
   importSpecText,
   checkSpec,
   extractSpec,
+  reopenScope,
+  generateRemainingSpec,
   confirmSpec,
   startPlanning,
   setTemplate,
@@ -183,32 +186,33 @@ function importSpecText(content, filename = "") {
   }
 }
 
-async function extractSpec() {
+async function extractSpec(stage = "scope") {
   const state = store.getState();
-  const source = state.specText.trim();
+  const source = (stage === "full" ? state.specText : (state.sourceText || state.extraction?.source || state.specText)).trim();
   if (state.busy || state.spec?.locked || !source) return;
   if (api.mode !== "http" || !liveLlmConfigured) {
-    notice("error", "AI_Review需要已配置实时模型的后端。");
+    notice("error", "AI_Review 需要已配置实时模型的后端。");
     return;
   }
   store.dispatch({ type: "EXTRACTION_BUSY", busy: true });
-  notice("info", "DeepSeek 正在审查设计规格并生成可核对的修订稿。");
+  notice("info", stage === "full" ? "DeepSeek 正在审查完整设计规格。" : "DeepSeek 正在审查需求并生成产品范围。");
   try {
-    const result = await api.extractSpec(source);
-    if (store.getState().specText !== state.specText) return;
-    views.spec.showSource(state.specText);
+    const confirmedScope = stage === "full" ? state.extraction?.confirmedScope : undefined;
+    const result = await api.extractSpec(source, { stage, confirmed_scope: confirmedScope });
+    if (store.getState().sourceText !== state.sourceText || store.getState().specText !== state.specText) return;
     store.dispatch({
       type: "SPEC_LOADED", draft: result.normalized, text: result.text, source: "ai-extraction",
+      extraction: { stage, source: state.sourceText || state.extraction?.source || source, confirmedScope },
     });
     store.dispatch({ type: "SPEC_CHECKED", issues: result.issues });
     store.dispatch({ type: "SPEC_AI_REVIEW", report: result.review });
     const missing = result.issues.errors.length;
     notice(missing ? "warn" : "info", missing
-      ? `AI_Review 已生成草稿，还有 ${missing} 处缺口。请对照原文补充后再确认。`
-      : "AI_Review 已完成。请进行人工 Review，核对发现与补充假设后确认。");
+      ? `AI_Review 已返回 ${missing} 处待处理问题，请对照原文复核。`
+      : stage === "full" ? "AI_Review 已完成，请人工复核并确认规格。" : "AI_Review 已生成范围，请核对后再生成其余规格。");
   } catch (error) {
     if (error instanceof ApiError && error.code === "HTTP_404") {
-      notice("error", "当前后端版本缺少 AI_Review接口。请在项目根目录重新启动后端，再打开对应端口的工作台。");
+      notice("error", "当前后端版本缺少 AI_Review 接口。请在项目根目录重新启动后端，再打开对应端口的工作台。");
     } else {
       fail(error);
     }
@@ -217,7 +221,57 @@ async function extractSpec() {
   }
 }
 
+function reopenScope() {
+  const state = store.getState();
+  if (state.busy || !state.extraction?.confirmedScope) return;
+  store.dispatch({ type: "SCOPE_TEXT_CHANGE", text: state.specText });
+  notice("warn", "修改范围后需重新生成其余规格和计划。");
+}
+
+function checkScope() {
+  const state = store.getState();
+  const parsed = parseSpecMarkdownClient((state.specParts ?? splitSpecText(state.specText)).scope);
+  const issues = gapCheck(parsed);
+  const scopeIssues = {
+    errors: issues.errors.filter((item) => ["MISSING_PRODUCT", "MISSING_SCOPE"].includes(item.code)),
+    warnings: [],
+  };
+  store.dispatch({ type: "SPEC_CHECKED", issues: scopeIssues });
+  return scopeIssues.errors.length === 0;
+}
+
+async function generateRemainingSpec() {
+  const state = store.getState();
+  if (state.busy || !checkScope()) return;
+  store.dispatch({ type: "EXTRACTION_BUSY", busy: true });
+  notice("info", "正在根据已确认范围生成其余规格。");
+  try {
+    const scope = (state.specParts ?? splitSpecText(state.specText)).scope;
+    const source = state.sourceText || state.extraction?.source || scope;
+    const result = await api.extractSpec(source, {
+      stage: "full", confirmed_scope: scope,
+    });
+    store.dispatch({
+      type: "SPEC_LOADED", draft: result.normalized, text: result.text, source: "ai-extraction",
+      extraction: { ...state.extraction, source, stage: "full", confirmedScope: scope },
+    });
+    store.dispatch({ type: "SPEC_CHECKED", issues: result.issues });
+    store.dispatch({ type: "SPEC_AI_REVIEW", report: result.review });
+    notice(result.issues.errors.length ? "warn" : "info", result.issues.errors.length
+      ? `规格已生成，还有 ${result.issues.errors.length} 处缺口，请补充后确认。`
+      : "规格已生成。请核对 AI 补充假设，再确认规格。");
+  } catch (error) {
+    fail(error);
+  } finally {
+    store.dispatch({ type: "EXTRACTION_BUSY", busy: false });
+  }
+}
+
 async function checkSpec() {
+  if (store.getState().extraction?.stage === "scope") {
+    if (checkScope()) notice("info", "范围可以确认，确认后将生成其余规格。");
+    return;
+  }
   const parsed = parseSpecInput();
   if (!parsed) return;
   store.dispatch({ type: "SPEC_PARSED", draft: parsed.parsedPreview });
@@ -242,6 +296,10 @@ async function checkSpec() {
 }
 
 async function confirmSpec() {
+  if (store.getState().extraction?.stage === "scope") {
+    notice("warn", "请先确认范围并生成其余规格");
+    return;
+  }
   const parsed = parseSpecInput();
   if (!parsed) return;
   store.dispatch({ type: "SPEC_PARSED", draft: parsed.parsedPreview });
