@@ -60,6 +60,37 @@ class EndToEndWorkflowTests(unittest.TestCase):
                 self.assertNotIn("spec_id", draft)
                 self.assertEqual(json.loads(complete.call_args.args[0][1]["content"])["source_document"], source)
 
+    def test_two_stage_extraction_preserves_confirmed_scope(self):
+        scope = "# 实验室预约\n\n## 产品范围\n学生按日期预约空闲实验室。\n- 提交预约\n\n明确排除：\n- 付费"
+        edited = scope.replace("- 付费", "- 付费和取消预约")
+        remaining = "\n\n## 需求条目\n| 编号 | 行为描述 | 验收条件 |\n| --- | --- | --- |\n| REQ-001 | 学生提交预约 | 返回预约编号 |"
+        source = "做一个实验室预约系统，预约成功返回编号。"
+        with patch.dict("os.environ", {
+            "PM_BASE_URL": "http://mock-model.local", "PM_API_KEY": "test", "PM_MODEL": "test",
+        }), patch("backend.app.planner.providers.HttpProvider.complete", side_effect=[
+            json.dumps({"markdown": scope + remaining}),
+            json.dumps({"markdown": scope.replace("实验室预约", "被改写的名称") + remaining}),
+        ]) as complete:
+            with TestClient(create_app(self.db_path)) as client:
+                first = client.post("/specs/extract", json={"text": source, "stage": "scope"})
+                first.raise_for_status()
+                self.assertEqual(first.json()["text"], scope)
+                self.assertEqual(first.json()["issues"]["errors"], [])
+                second = client.post("/specs/extract", json={
+                    "text": source, "stage": "full", "confirmed_scope": edited,
+                })
+                second.raise_for_status()
+                self.assertEqual(second.json()["text"], edited + remaining)
+                self.assertEqual(second.json()["issues"]["errors"], [])
+                payload = json.loads(complete.call_args.args[0][1]["content"])
+                self.assertEqual(payload, {"source_document": source, "confirmed_scope": edited})
+                self.assertEqual(complete.call_count, 2)
+                invalid = client.post("/specs/extract", json={
+                    "text": source, "stage": "full", "confirmed_scope": "# 空范围",
+                })
+                self.assertEqual(invalid.status_code, 502)
+                self.assertEqual(complete.call_count, 2)
+
     def test_three_products_json_and_markdown_end_to_end(self):
         chat_spec = json.loads((ROOT / "examples/contracts/chat/design-spec.json").read_text(encoding="utf-8"))
         community_spec = json.loads((ROOT / "examples/contracts/community/design-spec.json").read_text(encoding="utf-8"))

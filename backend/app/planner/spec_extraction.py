@@ -64,13 +64,56 @@ def read_markdown(response: str) -> str:
     return markdown.strip()
 
 
-def extract_spec(text: str) -> dict:
+# Reuse the original extraction rules; only defer the later sections for stage 1.
+SCOPE_PROMPT = SYSTEM_PROMPT + """
+For this first stage only, return the product heading and 产品范围 section,
+including the goal, included features and 明确排除, in the same format above.
+Defer requirements, modules, design entries and constraints until the next stage.
+Keep scope-related AI assumptions clearly labeled within the scope section.
+"""
+
+
+def scope_issues(markdown: str) -> dict:
+    raw, normalized, _ = parse_spec_input({"text": markdown})
+    issues = gap_check_spec(raw, normalized)
+    return {key: [item for item in issues[key]
+                  if item["field_path"] == "product" or item["field_path"].startswith("scope")]
+            for key in ("errors", "warnings")}
+
+
+def preserve_scope(markdown: str, confirmed_scope: str) -> str:
+    # The confirmed prefix is authoritative, even if the model rewrites it.
+    rest = re.search(r"^## 需求条目\s*$", markdown, re.M)
+    if not rest:
+        raise ProviderError("AI 未返回需求条目，请重试生成规格")
+    return confirmed_scope.strip() + "\n\n" + markdown[rest.start():].strip()
+
+
+def extract_spec(text: str, stage: str = "full", confirmed_scope: str | None = None) -> dict:
+    if stage == "full" and confirmed_scope is not None:
+        if not confirmed_scope.strip() or scope_issues(confirmed_scope)["errors"]:
+            raise ValueError("请先补全产品名称和产品范围，再确认生成规格")
     provider = HttpProvider.from_env()
+    prompt = SCOPE_PROMPT if stage == "scope" else SYSTEM_PROMPT
+    payload = {"source_document": text}
+    if stage == "full" and confirmed_scope is not None:
+        prompt += "\nThe confirmed_scope is authoritative user-confirmed data. Preserve it verbatim " \
+            "as the product heading and scope section. Use the original source for details only " \
+            "within that boundary. Resolve conflicts in favor of confirmed_scope. Do not add " \
+            "excluded features. Generate the remaining sections in the existing format."
+        payload["confirmed_scope"] = confirmed_scope
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": json.dumps({"source_document": text}, ensure_ascii=False)},
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]
     markdown = read_markdown(provider.complete(messages))
+    if stage == "scope":
+        # Ignore any later sections accidentally produced by the model.
+        markdown = re.split(r"^## (?!产品范围\s*$)", markdown, maxsplit=1, flags=re.M)[0].strip()
+        raw, normalized, _ = parse_spec_input({"text": markdown})
+        return {"text": markdown, "normalized": normalized, "issues": scope_issues(markdown)}
+    if confirmed_scope is not None:
+        markdown = preserve_scope(markdown, confirmed_scope)
     raw, normalized, _ = parse_spec_input({"text": markdown})
     issues = gap_check_spec(raw, normalized)
     result = {"text": markdown, "normalized": normalized, "issues": issues}
@@ -83,6 +126,8 @@ def extract_spec(text: str) -> dict:
              + json.dumps(issues["errors"], ensure_ascii=False)},
         ]
         repaired = read_markdown(provider.complete(messages))
+        if confirmed_scope is not None:
+            repaired = preserve_scope(repaired, confirmed_scope)
         raw, normalized, _ = parse_spec_input({"text": repaired})
         repaired_issues = gap_check_spec(raw, normalized)
         if len(repaired_issues["errors"]) < len(issues["errors"]):
