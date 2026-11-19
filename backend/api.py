@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from .delivery import delivery_router
 from .graph_api import graph_router
+from .review import review_router
 from .store import PlanStore, ROOT, RevisionConflict
 from .workflow import initialize, live_llm_env_ready, workflow_router
 
@@ -95,6 +96,7 @@ def create_app(path=None, planner=None, validator=None, compiler=None):
     app.include_router(graph_router(store))
     app.include_router(workflow_router(store, planner))
     app.include_router(delivery_router(store, validator, compiler))
+    app.include_router(review_router(store))
 
     @app.get("/workspace.html", include_in_schema=False)
     def legacy_workspace(request: Request):
