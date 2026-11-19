@@ -221,6 +221,12 @@ function createHttpApi(base) {
       request("GET", `/plans/${encodeURIComponent(planId)}/review?revision=${encodeURIComponent(revision)}`),
     updateReview: (planId, action, body) =>
       request("POST", `/plans/${encodeURIComponent(planId)}/review${action ? `/${action}` : ""}`, body),
+    startAgentRun: (planId, revision, mode) =>
+      request("POST", `/plans/${encodeURIComponent(planId)}/agent-run`, { revision, mode }),
+    getAgentRun: (planId, revision, runId) =>
+      request("GET", `/plans/${encodeURIComponent(planId)}/agent-run/${encodeURIComponent(runId)}?revision=${revision}`),
+    updateAgentRun: (planId, revision, runId, action, body) =>
+      request("POST", `/plans/${encodeURIComponent(planId)}/agent-run/${encodeURIComponent(runId)}/${action}?revision=${revision}`, body),
     loadHealth: () => request("GET", "/health"),
     loadTemplates: () => request("GET", "/templates"),
     loadSpecSample: (name = "chat") => request("GET", `/specs/sample/${encodeURIComponent(name)}`),

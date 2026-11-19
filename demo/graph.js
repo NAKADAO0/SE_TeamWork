@@ -183,7 +183,9 @@ async function show() {
       const points = lane < 0
         ? [start, [x + CARD_W + 25, start[1]], [x + CARD_W + 25, end[1]], end]
         : [start, [x + CARD_W + 16, start[1]], [x + CARD_W + 16, 39 + lane * 9], [tx - 24, 39 + lane * 9], [tx - 24, end[1]], end];
-      return `<path data-from="${escape(edge.from)}" data-to="${escape(edge.to)}" d="${route(points)}" fill="none" stroke="#9eacc0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#tip)"/>`;
+      const fromRole = byId.get(edge.from)?.role, toRole = byId.get(edge.to)?.role;
+      const crossRole = Boolean(fromRole && toRole && fromRole !== toRole);
+      return `<path data-from="${escape(edge.from)}" data-to="${escape(edge.to)}" data-cross-role="${crossRole}" d="${route(points)}" fill="none" stroke="#9eacc0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#tip)"/>`;
     });
     board.innerHTML = `<svg width="${width}" height="${height}" aria-hidden="true"><defs><marker id="tip" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#7489ad"/></marker><marker id="tip-active" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#3657cb"/></marker></defs>${paths.join('')}</svg>${columns.map((column, i) => `<div class="layer-heading" style="left:${PAD + i * PITCH}px;width:${CARD_W}px"><span>${layout === 'dependencies' ? '依赖层' : '执行批次'} ${i + 1}</span><small>${column.length} 个任务</small></div>`).join('')}${tasks.map(task => {
       const [x, y] = point(task.id);
@@ -212,10 +214,12 @@ async function show() {
     }
     for (const path of board.querySelectorAll('path[data-from]')) {
       const active = path.dataset.from === id || path.dataset.to === id;
-      path.setAttribute('stroke', active ? '#3657cb' : '#94a3b8');
+      const crossRole = path.dataset.crossRole === 'true';
+      path.setAttribute('stroke', crossRole ? '#247873' : active ? '#3657cb' : '#94a3b8');
       path.setAttribute('stroke-width', active ? '2.25' : '1.5');
+      path.setAttribute('stroke-dasharray', crossRole ? '6 3' : 'none');
       path.setAttribute('marker-end', active ? 'url(#tip-active)' : 'url(#tip)');
-      path.style.opacity = active ? '1' : '0.45';
+      path.style.opacity = active ? '1' : crossRole ? '0.85' : '0.55';
     }
     // Draw selected edges last so crossing neutral routes cannot cover their arrowheads.
     for (const path of board.querySelectorAll('path[data-from]')) {

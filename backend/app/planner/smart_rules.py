@@ -390,7 +390,7 @@ def plan_with_provider(
                 "trace": {"mode": "live_llm", "attempts": 1},
             }
         provider = HttpProvider.from_env()
-        result = generate(spec, template, config, provider)
+        result = generate(spec, template, config, provider, require_workstreams=True)
         if result.status == "ok":
             return {
                 "status": "succeeded",

@@ -40,3 +40,4 @@ body.resizing-panel-height,body.resizing-panel-height *{cursor:row-resize!import
 #board .node {border-radius:10px;box-shadow:0 4px 12px #213c681c}
 #board .node:hover {border-color:#5d7cc5}
 .graph-toolbar button:focus-visible,#board .node:focus-visible {outline:2px solid #3657cb;outline-offset:2px}
+.graph-cross-key{color:#315b58;font-size:12px;white-space:nowrap}.graph-cross-key::before{content:"";width:16px;border-top:2px dashed #347c79;display:inline-block;vertical-align:middle;margin-right:5px}

@@ -1,6 +1,23 @@
 import { splitSpecText, joinSpecText } from "../../shared/specText.js";
 import { escapeHtml } from "../../shared/dom.js";
 
+function describeSnapshot(draft) {
+  const line = (title, value) => value ? `${title}：${value}` : "";
+  const list = (items) => Array.isArray(items) ? items.map((item) => `• ${item}`).join("\n") : "";
+  const scope = draft.scope ?? {};
+  const product = typeof draft.product === "string" ? draft.product : draft.product?.name;
+  const requirements = Array.isArray(draft.requirements) ? draft.requirements : [];
+  return {
+    source: [line("项目", product), line("目标", scope.goal)].filter(Boolean).join("\n"),
+    scope: [scope.included?.length && `纳入范围\n${list(scope.included)}`,
+      scope.excluded?.length && `明确排除\n${list(scope.excluded)}`].filter(Boolean).join("\n\n"),
+    remaining: requirements.map((entry) => [
+      [entry.id, entry.goal ?? entry.title].filter(Boolean).join(" · "),
+      line("验收", Array.isArray(entry.acceptance) ? entry.acceptance.join("；") : entry.acceptance),
+    ].filter(Boolean).join("\n")).join("\n\n"),
+  };
+}
+
 /**
  * 规格与配置视图（成员 1）。
  * 支持 JSON / Markdown 设计规格输入、文件导入、缺口检查、确认锁定、模板与生成模式配置。
@@ -178,9 +195,12 @@ export function mountSpecEditor(root, { store, actions }) {
     update(state) {
       const locked = Boolean(state.spec?.locked);
       const scopeStage = state.extraction?.stage === "scope";
-      const sourceValue = state.sourceText || state.extraction?.source || "";
-      const parts = !state.extraction && sourceValue === state.specText
+      const snapshot = locked && state.spec?.draft && /^\s*\{/.test(state.specText) ? describeSnapshot(state.spec.draft) : null;
+      const originalSource = state.sourceText || state.extraction?.source || "";
+      const sourceValue = originalSource || snapshot?.source || "";
+      const rawParts = !state.extraction && originalSource === state.specText
         ? { scope: "", remaining: "" } : state.specParts ?? splitSpecText(state.specText);
+      const parts = snapshot ? { scope: snapshot.scope, remaining: snapshot.remaining || rawParts.remaining } : rawParts;
       // Avoid replacing the active editor's value and moving its caret on each keystroke.
       if (source.value !== sourceValue) source.value = sourceValue;
       if (scope.value.trim() !== parts.scope.trim()) scope.value = parts.scope;

@@ -18,7 +18,7 @@ function node(tag, text, className) {
   return element;
 }
 
-export function mountReview(root) {
+export function mountReview(root, onChange = () => {}) {
   let key;
   let context;
   let data;
@@ -62,6 +62,7 @@ export function mountReview(root) {
   }
 
   function draw() {
+    onChange(data);
     root.replaceChildren(node("h2", "审查中心 · AI_Review 与人工 Review"));
     root.append(node("p", "AI_Review 审查你提交的代码差异，人工 Review 决定是否放行。不会自动读取 GitHub、执行测试或合并 PR。", "review-note"));
     if (!context) {

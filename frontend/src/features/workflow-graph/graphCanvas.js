@@ -8,10 +8,11 @@ import { dependencyIds, topologicalLevels } from "../../shared/graph.js";
  */
 export function mountGraph(root, { store, actions }) {
   root.innerHTML = `
-    <h2>依赖图 <small>（连线编辑为 P1 原型）</small></h2>
+    <h2>任务依赖图</h2>
     <div class="ws-row">
       <button type="button" data-action="link-mode">开始连线</button>
       <span class="ws-meta" data-role="hint">点击节点查看详情</span>
+      <span class="orch-edge-key">跨角色依赖</span>
     </div>
     <div class="ws-graph" data-role="stage">
       <div class="ws-graph-canvas" data-role="canvas">
@@ -111,6 +112,7 @@ export function mountGraph(root, { store, actions }) {
     stage.style.height = `${Math.min(height, 480)}px`;
 
     const paths = [];
+    const roles = new Map(tasks.map((task) => [task.id, task.role]));
     for (const task of tasks) {
       const to = position.get(task.id);
       if (!to) continue;
@@ -121,9 +123,8 @@ export function mountGraph(root, { store, actions }) {
         const y1 = PAD + from.ri * ROW_H + CARD_H / 2;
         const x2 = PAD + to.ci * COL_W;
         const y2 = PAD + to.ri * ROW_H + CARD_H / 2;
-        paths.push(
-          `<path class="ws-edge" d="M ${x1} ${y1} C ${x1 + 26} ${y1}, ${x2 - 26} ${y2}, ${x2} ${y2}" marker-end="url(#ws-arrow)"/>`,
-        );
+        const crossRole = task.role && roles.get(dep) && task.role !== roles.get(dep);
+        paths.push(`<path class="ws-edge${crossRole ? " cross-role" : ""}" d="M ${x1} ${y1} C ${x1 + 26} ${y1}, ${x2 - 26} ${y2}, ${x2} ${y2}" marker-end="url(#ws-arrow${crossRole ? "-cross" : ""})"/>`);
       }
     }
 
@@ -134,6 +135,9 @@ export function mountGraph(root, { store, actions }) {
       <defs>
         <marker id="ws-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
           <path d="M0 0 L10 5 L0 10z" fill="#7489ad"/>
+        </marker>
+        <marker id="ws-arrow-cross" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0 0 L10 5 L0 10z" fill="#347c79"/>
         </marker>
       </defs>
       ${paths.join("")}`;

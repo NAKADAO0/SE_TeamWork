@@ -1,4 +1,7 @@
 import { mountReview } from "./features/review/reviewPanel.js";
+import { mountOrchestration, STEPS } from "./features/orchestration/orchestration.js";
+import { mountAgentExecution } from "./features/orchestration/agentExecution.js";
+import { isPackageStage } from "./features/orchestration/workstreamCanvas.js";
 import { splitSpecText } from "./shared/specText.js";
 import { createApi, ApiError } from "./shared/api.js";
 import { download } from "./shared/dom.js";
@@ -31,9 +34,13 @@ const phaseEl = document.querySelector('[data-role="phase"]');
 const refsEl = document.querySelector('[data-role="refs"]');
 const messageEl = document.querySelector('[data-role="message"]');
 const versionsEl = document.querySelector('[data-role="versions"]');
-const stages = [...document.querySelectorAll("[data-stage]")];
-const panels = [...document.querySelectorAll("[data-stage-panel]")];
-let stage = restored?.state?.plan && ["spec", "tasks", "flow", "review"].includes(restored.stage) ? restored.stage : "spec";
+const knownStage = (key) => isPackageStage(key) || STEPS.some(([name]) => name === key);
+let stage = knownStage(restored?.stage) ? restored.stage : null;
+let agentRun, reviewState;
+const canvas = mountOrchestration(document.querySelector("#orchestration"), {
+  onSelect: (key) => showStage(key),
+  onClose: (returnFocus) => showStage(null, returnFocus),
+});
 
 function saveSession() {
   const state = store.getState();
@@ -45,20 +52,26 @@ function saveSession() {
   }
 }
 
-function showStage(next) {
+function showStage(next, returnFocus = false) {
+  const group = canvas.getPackage(next);
+  if (isPackageStage(next) && !group) next = null;
   stage = next;
-  for (const button of stages) {
-    if (button.dataset.stage === next) button.setAttribute("aria-current", "step");
-    else button.removeAttribute("aria-current");
+  const url = new URL(location.href);
+  if (url.searchParams.has("plan") && url.searchParams.get("stage") !== (next ?? "overview")) {
+    url.searchParams.set("stage", next ?? "overview");
+    history.replaceState(history.state, "", url);
   }
-  for (const panel of panels) panel.hidden = panel.dataset.stagePanel !== next;
+  if (next === "flow" || next === "tasks") {
+    document.querySelector(`[data-task-detail-slot="${next}"]`)
+      .append(document.querySelector('[data-view="detail"]'));
+  }
+  const agentSlot = group ? "package" : "agents";
+  document.querySelector(`[data-agent-slot="${agentSlot}"]`).append(document.querySelector('[data-view="agents"]'));
+  agents.setScope(group);
+  canvas.show(next, returnFocus);
   saveSession();
-  updateReview();
 }
 
-for (const button of stages) {
-  button.addEventListener("click", () => showStage(button.dataset.stage));
-}
 const graphLink = document.querySelector('[data-action="open-graph"]');
 const buttons = {
   workflow: document.querySelector('[data-action="run-workflow"]'),
@@ -87,7 +100,15 @@ const actions = {
   unlink,
 };
 
-const review = mountReview(document.querySelector('[data-view="review"]'));
+const updateCanvas = () => canvas.update(store.getState(), agentRun, reviewState);
+const review = mountReview(document.querySelector('[data-view="review"]'), (value) => {
+  reviewState = value;
+  updateCanvas();
+});
+const agents = mountAgentExecution(document.querySelector('[data-view="agents"]'), (value) => {
+  agentRun = value;
+  updateCanvas();
+});
 
 const views = {
   spec: mountSpecEditor(document.querySelector('[data-view="spec"]'), { store, actions }),
@@ -345,6 +366,12 @@ async function startPlanning(visualize = false) {
       config: state.config,
       mode: "live_llm",
     });
+    const url = new URL(location.href);
+    if (url.searchParams.has("plan")) {
+      for (const key of ["plan", "revision", "stage", "agent_run"]) url.searchParams.delete(key);
+      history.replaceState(history.state, "", url);
+    }
+    showStage(null);
     store.dispatch({ type: "JOB_STARTED", jobId: job.job_id });
     pollJob(job.job_id, visualize);
   } catch (error) {
@@ -365,11 +392,10 @@ async function pollJob(jobId, visualize) {
       });
       if (store.getState().job?.job_id !== jobId) return;
       store.dispatch({ type: "JOB_SUCCEEDED", plan });
-      showStage("tasks");
+      if (!visualize) showStage("tasks");
       if (visualize && await runValidation() && await runCompile()) {
-        showStage("flow");
-        graphLink.focus({preventScroll: true});
-        notice("info", "编排已完成，可在下方查看批次，或打开完整图谱。");
+        showStage(null);
+        notice("info", "工作包已生成。点开工作包查看小任务，确认执行计划后可派发 Agent。");
       }
       return;
     }
@@ -506,7 +532,7 @@ async function runConfirm() {
       revision: result.revision ?? state.plan.revision,
       execution_plan_id: result.execution_plan_id,
     });
-    notice("info", "执行计划已确认，可进入「审查中心」运行 AI_Review 和人工 Review。");
+    notice("info", "执行计划已确认，可在画布派发 Agent，或登记开发差异进入审查。");
   } catch (error) {
     fail(error);
   }
@@ -659,11 +685,6 @@ const MODE_LABEL = {
   curated_example: "预编排案例",
 };
 
-function updateReview() {
-  const state = store.getState();
-  if (stage !== "review") return;
-  review.update(api, state.phase === PHASE.PLAN_CONFIRMED && !state.stale ? state.plan : null);
-}
 function render(state) {
   phaseEl.textContent = PHASE_LABEL[state.phase] ?? state.phase;
   phaseEl.dataset.phase = state.phase;
@@ -683,22 +704,21 @@ function render(state) {
 
   buttons.workflow.disabled = !state.spec?.locked || state.busy || api.mode === "fixture";
   buttons.workflow.title = api.mode === "fixture" ? "请通过后端服务打开工作台" : "分解任务、校验并编排";
-  for (const button of stages) {
-    button.disabled = (button.dataset.stage !== "spec" && !state.plan) ||
-      (button.dataset.stage === "review" && (state.phase !== PHASE.PLAN_CONFIRMED || state.stale));
-  }
-  if (!state.plan && stage !== "spec") showStage("spec");
   buttons.save.hidden = api.mode !== "http" || !state.plan;
   buttons.save.disabled = !dirty || state.busy;
   buttons.validate.disabled = !state.plan || state.busy;
   buttons.compile.disabled = !state.plan || !state.validation || state.busy;
   buttons.confirm.disabled = state.phase !== PHASE.PLAN_COMPILED || state.stale || state.busy;
+  graphLink.hidden = !state.execution || state.execution.compiled === false || state.stale;
   buttons.export.disabled = !state.plan;
   buttons.exportMd.disabled = !state.plan;
 
   for (const view of Object.values(views)) view.update(state);
   renderVersions(state);
-  updateReview();
+  const confirmed = state.phase === PHASE.PLAN_CONFIRMED && !state.stale ? state.plan : null;
+  review.update(api, confirmed);
+  agents.update(api, confirmed);
+  updateCanvas();
 }
 
 store.subscribe((state) => {
@@ -751,7 +771,8 @@ async function resolveApi() {
     if (requestedPlan && Number.isSafeInteger(revision) && revision > 0 && api.mode === "http") {
       const bundle = await api.getConfirmedBundle(requestedPlan, revision);
       store.dispatch({type:"RESTORE_CONFIRMED_PLAN", bundle});
-      showStage(params.get("stage") === "flow" ? "flow" : "review");
+      const requestedStage = params.get("stage");
+      showStage(knownStage(requestedStage) ? requestedStage : null);
     }
     render(store.getState());
     window.__workspace = { store, api, actions };

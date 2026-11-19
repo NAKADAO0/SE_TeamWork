@@ -253,16 +253,22 @@ class EndToEndWorkflowTests(unittest.TestCase):
     def test_live_llm_mode_when_env_configured_uses_http_provider_with_repair(self):
         chat_spec = json.loads((ROOT / "examples/contracts/chat/design-spec.json").read_text(encoding="utf-8"))
         good_plan = json.loads((ROOT / "examples/contracts/chat/task-plan.json").read_text(encoding="utf-8"))
-        mock_payload = json.dumps({
+        base_payload = {
             "tasks": good_plan["tasks"],
             "assumptions": good_plan["assumptions"],
             "clarifications": [],
-        }, ensure_ascii=False)
+        }
+        groups = [
+            {"id": "WP1", "title": "消息发送", "summary": "发送与会话实现。", "task_ids": ["C1", "C2", "C3", "C6"]},
+            {"id": "WP2", "title": "历史查询与联调", "summary": "历史翻页与端到端验证。", "task_ids": ["C4", "C5", "C7", "C8"]},
+        ]
+        outputs = [json.dumps(base_payload, ensure_ascii=False),
+                   json.dumps({**base_payload, "workstreams": groups}, ensure_ascii=False)]
 
         with patch.dict(
             "os.environ",
             {"PM_BASE_URL": "http://mock-llm.local/v1", "PM_API_KEY": "test-key", "PM_MODEL": "mock-model"},
-        ), patch("backend.app.planner.providers.HttpProvider.complete", return_value=mock_payload) as mock_complete:
+        ), patch("backend.app.planner.providers.HttpProvider.complete", side_effect=outputs) as mock_complete:
             with TestClient(create_app(self.db_path)) as client:
                 self.assertTrue(client.get("/health").json()["live_llm_configured"])
                 sid = client.post("/specs", json={"draft": chat_spec}).json()["spec_id"]
@@ -275,7 +281,10 @@ class EndToEndWorkflowTests(unittest.TestCase):
                 done = client.get(f"/planning-jobs/{job.json()['job_id']}").json()
                 self.assertEqual(done["status"], "succeeded", done)
                 self.assertEqual(done["generation_mode"], "live_llm")
-                self.assertEqual(mock_complete.call_count, 1)
+                self.assertEqual(mock_complete.call_count, 2)
+                self.assertIn("E_WORKSTREAMS", mock_complete.call_args.args[0][-1]["content"])
+                plan = client.get(f"/plans/{done['plan_ref']['plan_id']}?revision=1").json()["plan"]
+                self.assertEqual(plan["workstreams"], groups)
 
 
 if __name__ == "__main__":

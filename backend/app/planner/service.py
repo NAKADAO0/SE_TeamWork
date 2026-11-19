@@ -6,9 +6,10 @@ import uuid
 
 from . import fields as F
 from .models import GenerationResult, PlanIssue, ProviderError, Trace
-from .prompt import build_messages, build_repair_messages
+from .prompt import PROMPT_VERSION, build_messages, build_repair_messages
 from .providers import Provider
 from .rules import errors, precheck, validate
+from .workstreams import validate_workstreams
 
 # 给成员 5 的作业状态映射，直接照抄即可
 JOB_STATUS = {
@@ -180,7 +181,7 @@ def _validate_with_contracts(plan: dict, spec: dict, template: dict) -> list[Pla
     ]
 
 
-def _run_validation(plan: dict, spec: dict, template: dict) -> list[PlanIssue]:
+def _run_validation(plan: dict, spec: dict, template: dict, *, require_handoff=False) -> list[PlanIssue]:
     issues = validate(plan, spec, template)
     existing = {(i.severity, i.field_path, i.message) for i in issues}
     for extra in _validate_with_contracts(plan, spec, template):
@@ -188,6 +189,24 @@ def _run_validation(plan: dict, spec: dict, template: dict) -> list[PlanIssue]:
         if key not in existing:
             existing.add(key)
             issues.append(extra)
+    # A multi-requirement plan with separate verification should contain a
+    # concrete handoff. Leave genuinely serial or single-role templates alone.
+    if (require_handoff and not errors(issues) and len(F.pick(spec, F.SPEC, "requirements", []) or []) > 1
+            and template.get("require_verification", True)
+            and {"qa"} < set(template.get("allowed_roles") or [])):
+        tasks = F.pick(plan, F.PLAN, "tasks", []) or []
+        roles = {F.pick(task, F.TASK, "id"): F.pick(task, F.TASK, "role") for task in tasks
+                 if isinstance(task, dict)}
+        has_handoff = any(
+            (source_role := roles.get(F.pick(dep, F.DEPEND, "task_id") if isinstance(dep, dict) else dep))
+            and source_role != F.pick(task, F.TASK, "role")
+            for task in tasks if isinstance(task, dict)
+            for dep in (F.pick(task, F.TASK, "depends_on", []) or []) if isinstance(dep, (dict, str))
+        )
+        if not has_handoff:
+            issues.append(PlanIssue("E_ROLE_HANDOFF", "error",
+                "多需求计划缺少跨角色交接。请明确一条实际的实现→验证或实现→集成依赖，写明消费的产物；不要凭空添加依赖。",
+                field_path="tasks[].depends_on"))
     return issues
 
 
@@ -197,11 +216,14 @@ def generate(
     config: dict,
     provider: Provider,
     trace_id: str | None = None,
+    *,
+    require_workstreams: bool = False,
 ) -> GenerationResult:
     started = time.time()
     trace = Trace(
         mode=provider.name,
         model=str(getattr(provider, "model", "") or ""),
+        prompt_version=PROMPT_VERSION,
         trace_id=trace_id or uuid.uuid4().hex[:12],
     )
 
@@ -222,11 +244,27 @@ def generate(
         trace.latency_ms = int((time.time() - started) * 1000)
         return GenerationResult("failed", issues=[PlanIssue("E900", "error", str(e))], trace=trace)
 
+    live = provider.name == "live_llm"
+
+    def inspect_output(output):
+        payload, parse_issue = _parse(output)
+        if parse_issue:
+            return None, [parse_issue]
+        if not isinstance(payload, dict):
+            return None, [PlanIssue("E001", "error", "规划输出的顶层须为 JSON 对象。")]
+        plan = envelope(payload, spec, template, config, provider.name, trace.trace_id)
+        issues = _run_validation(plan, spec, template, require_handoff=live)
+        if require_workstreams or "workstreams" in payload:
+            if not all(isinstance(task, dict) for task in plan["tasks"]):
+                return plan, issues
+            try:
+                plan["workstreams"] = validate_workstreams(payload.get("workstreams"), plan["tasks"])
+            except ValueError as exc:
+                issues.append(PlanIssue("E_WORKSTREAMS", "error", str(exc), field_path="workstreams"))
+        return plan, issues
+
     trace.attempts = 1
-    plan, parse_issue = _parse(raw)
-    if plan is not None:
-        plan = envelope(plan, spec, template, config, provider.name, trace.trace_id)
-    issues = [parse_issue] if parse_issue else _run_validation(plan, spec, template)
+    plan, issues = inspect_output(raw)
 
     # 3. 有 error 才修复；只有 warning 直接通过
     if errors(issues):
@@ -243,10 +281,7 @@ def generate(
                 rejected_output=raw,
             )
 
-        plan2, parse_issue2 = _parse(raw2)
-        if plan2 is not None:
-            plan2 = envelope(plan2, spec, template, config, provider.name, trace.trace_id)
-        issues2 = [parse_issue2] if parse_issue2 else _run_validation(plan2, spec, template)
+        plan2, issues2 = inspect_output(raw2)
 
         if errors(issues2):
             trace.latency_ms = int((time.time() - started) * 1000)
