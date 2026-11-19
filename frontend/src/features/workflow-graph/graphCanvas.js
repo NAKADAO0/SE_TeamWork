@@ -14,12 +14,15 @@ export function mountGraph(root, { store, actions }) {
       <span class="ws-meta" data-role="hint">点击节点查看详情</span>
     </div>
     <div class="ws-graph" data-role="stage">
-      <svg data-role="svg" aria-hidden="true"></svg>
-      <div data-role="board"></div>
+      <div class="ws-graph-canvas" data-role="canvas">
+        <svg data-role="svg" aria-hidden="true"></svg>
+        <div data-role="board"></div>
+      </div>
     </div>
   `;
 
   const stage = root.querySelector('[data-role="stage"]');
+  const canvas = root.querySelector('[data-role="canvas"]');
   const svg = root.querySelector('[data-role="svg"]');
   const board = root.querySelector('[data-role="board"]');
   const hint = root.querySelector('[data-role="hint"]');
@@ -86,8 +89,9 @@ export function mountGraph(root, { store, actions }) {
     if (!tasks.length) {
       board.innerHTML = "";
       svg.innerHTML = "";
-      stage.style.width = "100%";
       stage.style.height = "160px";
+      canvas.style.width = "100%";
+      canvas.style.height = "160px";
       hint.textContent = "尚未生成计划";
       return;
     }
@@ -102,9 +106,9 @@ export function mountGraph(root, { store, actions }) {
     const rows = Math.max(1, ...columns.map((column) => column.length));
     const width = Math.max(columns.length * COL_W, 320) + PAD * 2;
     const height = rows * ROW_H + PAD * 2;
-    stage.style.width = `${width}px`;
-    stage.style.height = `${height}px`;
-    stage.style.overflow = "auto";
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    stage.style.height = `${Math.min(height, 480)}px`;
 
     const paths = [];
     for (const task of tasks) {
