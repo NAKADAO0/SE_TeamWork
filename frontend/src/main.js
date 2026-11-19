@@ -1,3 +1,7 @@
+import { mountReview } from "./features/review/reviewPanel.js";
+import { mountOrchestration, STEPS } from "./features/orchestration/orchestration.js";
+import { mountAgentExecution } from "./features/orchestration/agentExecution.js";
+import { isPackageStage } from "./features/orchestration/workstreamCanvas.js";
 import { splitSpecText } from "./shared/specText.js";
 import { createApi, ApiError } from "./shared/api.js";
 import { download } from "./shared/dom.js";
@@ -30,9 +34,13 @@ const phaseEl = document.querySelector('[data-role="phase"]');
 const refsEl = document.querySelector('[data-role="refs"]');
 const messageEl = document.querySelector('[data-role="message"]');
 const versionsEl = document.querySelector('[data-role="versions"]');
-const stages = [...document.querySelectorAll("[data-stage]")];
-const panels = [...document.querySelectorAll("[data-stage-panel]")];
-let stage = restored?.state?.plan && ["spec", "tasks", "flow"].includes(restored.stage) ? restored.stage : "spec";
+const knownStage = (key) => isPackageStage(key) || STEPS.some(([name]) => name === key);
+let stage = knownStage(restored?.stage) ? restored.stage : null;
+let agentRun, reviewState;
+const canvas = mountOrchestration(document.querySelector("#orchestration"), {
+  onSelect: (key) => showStage(key),
+  onClose: (returnFocus) => showStage(null, returnFocus),
+});
 
 function saveSession() {
   const state = store.getState();
@@ -44,19 +52,26 @@ function saveSession() {
   }
 }
 
-function showStage(next) {
+function showStage(next, returnFocus = false) {
+  const group = canvas.getPackage(next);
+  if (isPackageStage(next) && !group) next = null;
   stage = next;
-  for (const button of stages) {
-    if (button.dataset.stage === next) button.setAttribute("aria-current", "step");
-    else button.removeAttribute("aria-current");
+  const url = new URL(location.href);
+  if (url.searchParams.has("plan") && url.searchParams.get("stage") !== (next ?? "overview")) {
+    url.searchParams.set("stage", next ?? "overview");
+    history.replaceState(history.state, "", url);
   }
-  for (const panel of panels) panel.hidden = panel.dataset.stagePanel !== next;
+  if (next === "flow" || next === "tasks") {
+    document.querySelector(`[data-task-detail-slot="${next}"]`)
+      .append(document.querySelector('[data-view="detail"]'));
+  }
+  const agentSlot = group ? "package" : "agents";
+  document.querySelector(`[data-agent-slot="${agentSlot}"]`).append(document.querySelector('[data-view="agents"]'));
+  agents.setScope(group);
+  canvas.show(next, returnFocus);
   saveSession();
 }
 
-for (const button of stages) {
-  button.addEventListener("click", () => showStage(button.dataset.stage));
-}
 const graphLink = document.querySelector('[data-action="open-graph"]');
 const buttons = {
   workflow: document.querySelector('[data-action="run-workflow"]'),
@@ -84,6 +99,16 @@ const actions = {
   link,
   unlink,
 };
+
+const updateCanvas = () => canvas.update(store.getState(), agentRun, reviewState);
+const review = mountReview(document.querySelector('[data-view="review"]'), (value) => {
+  reviewState = value;
+  updateCanvas();
+});
+const agents = mountAgentExecution(document.querySelector('[data-view="agents"]'), (value) => {
+  agentRun = value;
+  updateCanvas();
+});
 
 const views = {
   spec: mountSpecEditor(document.querySelector('[data-view="spec"]'), { store, actions }),
@@ -182,32 +207,33 @@ function importSpecText(content, filename = "") {
   }
 }
 
-async function extractSpec() {
+async function extractSpec(stage = "scope") {
   const state = store.getState();
-  const source = (state.sourceText || state.extraction?.source || state.specText).trim();
+  const source = (stage === "full" ? state.specText : (state.sourceText || state.extraction?.source || state.specText)).trim();
   if (state.busy || state.spec?.locked || !source) return;
   if (api.mode !== "http" || !liveLlmConfigured) {
-    notice("error", "AI 整理需要已配置实时模型的后端。");
+    notice("error", "AI_Review 需要已配置实时模型的后端。");
     return;
   }
   store.dispatch({ type: "EXTRACTION_BUSY", busy: true });
-  notice("info", "DeepSeek 正在整理产品范围和明确排除项。");
+  notice("info", stage === "full" ? "DeepSeek 正在审查完整设计规格。" : "DeepSeek 正在审查需求并生成产品范围。");
   try {
-    const result = await api.extractSpec(source, { stage: "scope" });
+    const confirmedScope = stage === "full" ? state.extraction?.confirmedScope : undefined;
+    const result = await api.extractSpec(source, { stage, confirmed_scope: confirmedScope });
     if (store.getState().sourceText !== state.sourceText || store.getState().specText !== state.specText) return;
-    views.spec.showSource(state.specText);
     store.dispatch({
       type: "SPEC_LOADED", draft: result.normalized, text: result.text, source: "ai-extraction",
-      extraction: { stage: "scope", source },
+      extraction: { stage, source: state.sourceText || state.extraction?.source || source, confirmedScope },
     });
     store.dispatch({ type: "SPEC_CHECKED", issues: result.issues });
+    store.dispatch({ type: "SPEC_AI_REVIEW", report: result.review });
     const missing = result.issues.errors.length;
     notice(missing ? "warn" : "info", missing
-      ? `已整理出草稿，还有 ${missing} 处缺口。请对照原文补充后再确认。`
-      : "范围已整理。可直接修改，确认后再生成其余规格。");
+      ? `AI_Review 已返回 ${missing} 处待处理问题，请对照原文复核。`
+      : stage === "full" ? "AI_Review 已完成，请人工复核并确认规格。" : "AI_Review 已生成范围，请核对后再生成其余规格。");
   } catch (error) {
     if (error instanceof ApiError && error.code === "HTTP_404") {
-      notice("error", "当前后端版本缺少 AI 整理接口。请在项目根目录重新启动后端，再打开对应端口的工作台。");
+      notice("error", "当前后端版本缺少 AI_Review 接口。请在项目根目录重新启动后端，再打开对应端口的工作台。");
     } else {
       fail(error);
     }
@@ -251,6 +277,7 @@ async function generateRemainingSpec() {
       extraction: { ...state.extraction, source, stage: "full", confirmedScope: scope },
     });
     store.dispatch({ type: "SPEC_CHECKED", issues: result.issues });
+    store.dispatch({ type: "SPEC_AI_REVIEW", report: result.review });
     notice(result.issues.errors.length ? "warn" : "info", result.issues.errors.length
       ? `规格已生成，还有 ${result.issues.errors.length} 处缺口，请补充后确认。`
       : "规格已生成。请核对 AI 补充假设，再确认规格。");
@@ -339,6 +366,12 @@ async function startPlanning(visualize = false) {
       config: state.config,
       mode: "live_llm",
     });
+    const url = new URL(location.href);
+    if (url.searchParams.has("plan")) {
+      for (const key of ["plan", "revision", "stage", "agent_run"]) url.searchParams.delete(key);
+      history.replaceState(history.state, "", url);
+    }
+    showStage(null);
     store.dispatch({ type: "JOB_STARTED", jobId: job.job_id });
     pollJob(job.job_id, visualize);
   } catch (error) {
@@ -359,11 +392,10 @@ async function pollJob(jobId, visualize) {
       });
       if (store.getState().job?.job_id !== jobId) return;
       store.dispatch({ type: "JOB_SUCCEEDED", plan });
-      showStage("tasks");
+      if (!visualize) showStage("tasks");
       if (visualize && await runValidation() && await runCompile()) {
-        showStage("flow");
-        graphLink.focus({preventScroll: true});
-        notice("info", "编排已完成，可在下方查看批次，或打开完整图谱。");
+        showStage(null);
+        notice("info", "工作包已生成。点开工作包查看小任务，确认执行计划后可派发 Agent。");
       }
       return;
     }
@@ -500,6 +532,7 @@ async function runConfirm() {
       revision: result.revision ?? state.plan.revision,
       execution_plan_id: result.execution_plan_id,
     });
+    notice("info", "执行计划已确认，可在画布派发 Agent，或登记开发差异进入审查。");
   } catch (error) {
     fail(error);
   }
@@ -671,20 +704,21 @@ function render(state) {
 
   buttons.workflow.disabled = !state.spec?.locked || state.busy || api.mode === "fixture";
   buttons.workflow.title = api.mode === "fixture" ? "请通过后端服务打开工作台" : "分解任务、校验并编排";
-  for (const button of stages) {
-    button.disabled = button.dataset.stage !== "spec" && !state.plan;
-  }
-  if (!state.plan && stage !== "spec") showStage("spec");
   buttons.save.hidden = api.mode !== "http" || !state.plan;
   buttons.save.disabled = !dirty || state.busy;
   buttons.validate.disabled = !state.plan || state.busy;
   buttons.compile.disabled = !state.plan || !state.validation || state.busy;
   buttons.confirm.disabled = state.phase !== PHASE.PLAN_COMPILED || state.stale || state.busy;
+  graphLink.hidden = !state.execution || state.execution.compiled === false || state.stale;
   buttons.export.disabled = !state.plan;
   buttons.exportMd.disabled = !state.plan;
 
   for (const view of Object.values(views)) view.update(state);
   renderVersions(state);
+  const confirmed = state.phase === PHASE.PLAN_CONFIRMED && !state.stale ? state.plan : null;
+  review.update(api, confirmed);
+  agents.update(api, confirmed);
+  updateCanvas();
 }
 
 store.subscribe((state) => {
@@ -698,8 +732,7 @@ async function resolveApi() {
   const apiParam = params.get("api");
   if (apiParam === "fixture") return createApi({ mode: "fixture", base: "." });
   if (apiParam === "http") {
-    const base = location.port === "8010" || !location.port ? "" : "http://127.0.0.1:8010";
-    return createApi({ mode: "http", base });
+    return createApi({ mode: "http", base: "" });
   }
   if (apiParam && /^https?:\/\//i.test(apiParam)) {
     return createApi({ mode: "http", base: apiParam });
@@ -733,6 +766,14 @@ async function resolveApi() {
     }
     templates = await api.loadTemplates();
     views.spec.setTemplates(templates);
+    const requestedPlan = params.get("plan");
+    const revision = Number(params.get("revision"));
+    if (requestedPlan && Number.isSafeInteger(revision) && revision > 0 && api.mode === "http") {
+      const bundle = await api.getConfirmedBundle(requestedPlan, revision);
+      store.dispatch({type:"RESTORE_CONFIRMED_PLAN", bundle});
+      const requestedStage = params.get("stage");
+      showStage(knownStage(requestedStage) ? requestedStage : null);
+    }
     render(store.getState());
     window.__workspace = { store, api, actions };
   } catch (error) {

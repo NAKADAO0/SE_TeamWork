@@ -104,6 +104,28 @@ class TestRepairOnce(unittest.TestCase):
         self.assertEqual(result.status, "ok")
         self.assertEqual(provider.calls, 1)
 
+    def test_live_plan_without_any_role_handoff_is_repaired(self):
+        linked = load("good_plan.json")
+        flat = load("good_plan.json")
+        for task in flat["tasks"]:
+            task["role"] = "backend"
+
+        class TwoOutputs:
+            name = "live_llm"
+
+            def __init__(self):
+                self.calls = []
+
+            def complete(self, messages):
+                self.calls.append(messages)
+                return json.dumps(flat if len(self.calls) == 1 else linked)
+
+        provider = TwoOutputs()
+        result = generate(load("spec_chat.json"), TEMPLATE, CONFIG, provider)
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.trace.attempts, 2)
+        self.assertIn("跨角色", provider.calls[1][-1]["content"])
+
 
 class TestProviderFailure(unittest.TestCase):
     """模型挂了要报 failed，不能伪装成成功（对应 V13）。"""

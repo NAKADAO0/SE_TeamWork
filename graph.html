@@ -14,6 +14,7 @@
       <div class="layout-switch" role="group" aria-label="图谱排列方式"><button type="button" data-layout="batches" aria-pressed="true" title="按编排结果分批">批次图</button><button type="button" data-layout="dependencies" aria-pressed="false" title="按前置关系分层">依赖图</button></div>
       <div class="workspace-zoom" role="group" aria-label="依赖图缩放" title="⌘ / Ctrl + 滚轮缩放"><button type="button" id="zoom-out" aria-label="缩小依赖图">−</button><output id="zoom-value" aria-live="polite">100%</output><button type="button" id="zoom-in" aria-label="放大依赖图">＋</button><button type="button" id="zoom-fit">适应画布</button><button type="button" id="zoom-reset" title="恢复 100%">重置</button></div>
       <details class="legend-menu"><summary>状态</summary><div id="status-legend" aria-label="任务状态图例"></div></details>
+      <span class="graph-cross-key">跨角色依赖</span>
     </div>
     <section id="canvas" aria-label="任务依赖图"></section>
   </section>

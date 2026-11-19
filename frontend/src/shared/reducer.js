@@ -88,6 +88,8 @@ function replaceTask(plan, taskId, patch) {
 
 export function reduce(state, action) {
   switch (action.type) {
+    case "SPEC_AI_REVIEW":
+      return { ...state, specReview: action.report ?? null };
     case "SOURCE_TEXT_CHANGE":
       return {
         ...state,
@@ -95,7 +97,7 @@ export function reduce(state, action) {
         specText: state.extraction ? state.specText : action.text,
         specParts: state.extraction ? state.specParts : null,
         spec: state.spec ? { ...state.spec, locked: false, ref: null } : null,
-        extraction: state.extraction ? { ...state.extraction, source: action.text, stage: "scope" } : null,
+        extraction: state.extraction ? { ...state.extraction, source: action.text, stage: "scope", confirmedScope: null } : null,
         specIssues: null,
         phase: PHASE.SPEC_DRAFT,
         stale: Boolean(state.plan),
@@ -104,13 +106,14 @@ export function reduce(state, action) {
     case "SCOPE_TEXT_CHANGE":
       return {
         ...reduce(state, { type: "SPEC_TEXT_CHANGE", text: action.text, parts: action.parts }),
-        extraction: { ...state.extraction, source: state.sourceText || state.extraction?.source || "", stage: "scope" },
+        extraction: { ...state.extraction, source: state.sourceText || state.extraction?.source || "", stage: "scope", confirmedScope: null },
       };
 
     case "SPEC_TEXT_CHANGE": {
       const spec = state.spec ? { ...state.spec, locked: false } : null;
       return {
         ...state,
+        specReview: null,
         specText: action.text,
         specParts: action.parts ?? null,
         spec,
@@ -156,6 +159,7 @@ export function reduce(state, action) {
       const productName = typeof draft?.product === "string" ? draft.product : draft?.product?.name;
       return {
         ...state,
+        specReview: null,
         sourceText: action.extraction?.source ?? (
           /^(?:\s*[\[{]|##\s+(?:产品范围|需求条目))/m.test(action.text ?? "") ? "" : action.text ?? ""
         ),
@@ -175,6 +179,7 @@ export function reduce(state, action) {
       if (!state.spec) return state;
       return {
         ...state,
+        specReview: null,
         spec: { ...state.spec, locked: false },
         phase: PHASE.SPEC_DRAFT,
         message: message("warn", "已解除确认，可继续修改；再次确认会生成新的规格版本"),
@@ -232,6 +237,20 @@ export function reduce(state, action) {
         };
       }
       return { ...state, job };
+    }
+
+    case "RESTORE_CONFIRMED_PLAN": {
+      const bundle = action.bundle;
+      const plan = bundle.plan;
+      const draft = plan.normalized_spec ?? plan.spec ?? {};
+      const execution = { ...bundle.execution, batches: bundle.execution.batch_details ??
+        bundle.execution.batches.map((tasks,index)=>({ index,tasks,bindings:{},waiting:[] })) };
+      return { ...initialState(), plan, execution, validation: bundle.validation,
+        persistedRevision: bundle.revision, phase: PHASE.PLAN_CONFIRMED,
+        history: [snapshot(plan, PHASE.PLAN_CONFIRMED)],
+        spec: { locked:true, ref:plan.spec_ref, draft }, specText: JSON.stringify(draft,null,2),
+        specToken: state.specToken+1, selectedTaskId:plan.tasks?.[0]?.id,
+        message:message("info", `已打开已确认快照 ${bundle.plan_id} r${bundle.revision}`) };
     }
 
     case "PLAN_LOADED":

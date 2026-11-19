@@ -49,7 +49,15 @@ Exclude document boilerplate and offers of further assistance.
 """
 
 
-def read_markdown(response: str) -> str:
+REVIEW_PROMPT = """
+Review the original DesignSpec for inconsistent rules, omitted test conditions and unclear assumptions.
+In addition to markdown, return "review" with "summary" (Chinese string) and "findings" (array).
+Each finding is an object with "severity" ("warning" or "info"), "section", "message", and "suggestion" (strings).
+Focus on issues grounded in the source; 0 to 8 findings. Preserve reviewed and original facts.
+The reviewed markdown remains a proposed draft pending human confirmation.
+"""
+
+def read_result(response: str) -> tuple[str, dict | None]:
     if not isinstance(response, str):
         raise ProviderError("AI 未返回文本")
     content = response.strip()
@@ -61,7 +69,22 @@ def read_markdown(response: str) -> str:
     markdown = result.get("markdown") if isinstance(result, dict) else None
     if not isinstance(markdown, str) or not markdown.strip() or len(markdown) > 60000:
         raise ProviderError("AI 返回的规格草稿无效")
-    return markdown.strip()
+    review = result.get("review") if isinstance(result, dict) else None
+    if isinstance(review, dict) and isinstance(review.get("summary"), str) and isinstance(review.get("findings"), list):
+        findings = [
+            {key: item[key][:600] for key in ("severity", "section", "message", "suggestion")}
+            for item in review["findings"][:8]
+            if isinstance(item, dict) and item.get("severity") in ("warning", "info")
+            and all(isinstance(item.get(key), str) for key in ("section", "message", "suggestion"))
+        ]
+        review = {"summary": review["summary"][:1200], "findings": findings}
+    else:
+        review = None
+    return markdown.strip(), review
+
+
+def read_markdown(response: str) -> str:
+    return read_result(response)[0]
 
 
 # Reuse the original extraction rules; only defer the later sections for stage 1.
@@ -89,7 +112,7 @@ def preserve_scope(markdown: str, confirmed_scope: str) -> str:
     return confirmed_scope.strip() + "\n\n" + markdown[rest.start():].strip()
 
 
-def extract_spec(text: str, stage: str = "full", confirmed_scope: str | None = None) -> dict:
+def extract_spec(text: str, stage: str = "full", confirmed_scope: str | None = None, *, review_mode: bool = False) -> dict:
     if stage == "full" and confirmed_scope is not None:
         if not confirmed_scope.strip() or scope_issues(confirmed_scope)["errors"]:
             raise ValueError("请先补全产品名称和产品范围，再确认生成规格")
@@ -103,20 +126,24 @@ def extract_spec(text: str, stage: str = "full", confirmed_scope: str | None = N
             "excluded features. Generate the remaining sections in the existing format."
         payload["confirmed_scope"] = confirmed_scope
     messages = [
-        {"role": "system", "content": prompt},
+        {"role": "system", "content": prompt + (REVIEW_PROMPT if review_mode else "")},
         {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
     ]
-    markdown = read_markdown(provider.complete(messages))
+    markdown, review = read_result(provider.complete(messages))
     if stage == "scope":
         # Ignore any later sections accidentally produced by the model.
         markdown = re.split(r"^## (?!产品范围\s*$)", markdown, maxsplit=1, flags=re.M)[0].strip()
         raw, normalized, _ = parse_spec_input({"text": markdown})
-        return {"text": markdown, "normalized": normalized, "issues": scope_issues(markdown)}
+        return {"text": markdown, "normalized": normalized, "issues": scope_issues(markdown),
+                 **({"review": review} if review_mode else {})}
     if confirmed_scope is not None:
         markdown = preserve_scope(markdown, confirmed_scope)
     raw, normalized, _ = parse_spec_input({"text": markdown})
     issues = gap_check_spec(raw, normalized)
     result = {"text": markdown, "normalized": normalized, "issues": issues}
+
+    if review_mode:
+        result["review"] = review
 
     if issues["errors"] and (normalized.get("product") or normalized.get("requirements")):
         messages += [
@@ -125,11 +152,14 @@ def extract_spec(text: str, stage: str = "full", confirmed_scope: str | None = N
              "Resolve these validation errors through minimal, explicitly labeled assumptions: "
              + json.dumps(issues["errors"], ensure_ascii=False)},
         ]
-        repaired = read_markdown(provider.complete(messages))
+        repaired, repaired_review = read_result(provider.complete(messages))
         if confirmed_scope is not None:
             repaired = preserve_scope(repaired, confirmed_scope)
         raw, normalized, _ = parse_spec_input({"text": repaired})
         repaired_issues = gap_check_spec(raw, normalized)
         if len(repaired_issues["errors"]) < len(issues["errors"]):
-            return {"text": repaired, "normalized": normalized, "issues": repaired_issues}
+            result = {"text": repaired, "normalized": normalized, "issues": repaired_issues}
+            if review_mode:
+                result["review"] = repaired_review or review
+            return result
     return result

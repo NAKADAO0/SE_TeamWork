@@ -456,6 +456,11 @@ def delivery_router(store, validator=None, compiler=None):
         with transaction(store) as db:
             current(db, pid, request.revision)
             existing_exec = lookup(db, pid, request.revision, "execution")
+            # Compilation runs outside the write transaction. Confirmation may have won the race.
+            if lookup(db, pid, request.revision, "confirmation") is not None:
+                if existing_exec and (request.config is None or existing_exec.get("config") == compiled.get("config")):
+                    return existing_exec
+                raise HTTPException(409, "当前修订已确认，请派生新草稿后再调整容量配置")
             if existing_exec is None or (request.config is not None and existing_exec.get("config") != compiled.get("config")):
                 record(db, pid, request.revision, "execution", compiled)
                 # 同步把更新后的 config 保存在未确认的修订文档内（不改变 tasks/revision）
@@ -492,7 +497,8 @@ def delivery_router(store, validator=None, compiler=None):
         with closing(store.connect()) as db:
             db.execute("BEGIN")
             artifacts = {kind: json.loads(body) for kind, body in db.execute(
-                "SELECT kind,body FROM artifacts WHERE plan_id=? AND revision=?", (pid, revision))}
+                "SELECT kind,body FROM artifacts WHERE plan_id=? AND revision=? AND kind IN ('confirmation','execution','validation')",
+                (pid, revision))}
         if "confirmation" not in artifacts:
             raise HTTPException(409, "请先确认当前修订")
         bundle = {"plan_id": pid, "revision": revision, "status": "confirmed", "plan": plan, **artifacts}

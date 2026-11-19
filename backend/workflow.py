@@ -178,8 +178,15 @@ def workflow_router(store, planner=None):
         stage: Literal["scope", "full"] = "full"
         confirmed_scope: str | None = Field(default=None, max_length=60000)
 
+    @router.post("/specs/review")
+    def review_spec(request: ExtractionRequest):
+        return run_spec_review(request, review_mode=True)
+
     @router.post("/specs/extract")
     def extract(request: ExtractionRequest):
+        return run_spec_review(request)
+
+    def run_spec_review(request: ExtractionRequest, review_mode=False):
         from .app.planner.spec_extraction import extract_spec
         from .app.planner.models import ProviderError
 
@@ -188,7 +195,7 @@ def workflow_router(store, planner=None):
         if not live_llm_env_ready():
             raise HTTPException(503, detail="请先配置实时模型")
         try:
-            return extract_spec(request.text, request.stage, request.confirmed_scope)
+            return extract_spec(request.text, request.stage, request.confirmed_scope, review_mode=review_mode)
         except (ProviderError, ValueError) as exc:
             raise HTTPException(502, detail=str(exc)) from exc
 

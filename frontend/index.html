@@ -2,50 +2,90 @@
 <html lang="zh-CN">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>需求工作台 · SE Workflow</title>
+<title>编排工作台 · SE Studio</title>
 <link rel="stylesheet" href="../demo/site.css">
 <link rel="stylesheet" href="src/workspace.css">
-<body>
-<aside>
-  <div class="brand"><b>⌘</b> SE Studio</div>
-  <small>项目空间</small>
-  <nav>
-    <a href="../index.html"><i>◈</i>项目概览</a>
-    <a aria-current="page" href="index.html"><i>▤</i>需求工作台</a>
-    <a href="../graph.html"><i>⑂</i>工作流图谱</a>
-    <a href="../examples.html"><i>▦</i>规格样例</a>
-    <a href="../guide.html"><i>ⓘ</i>使用指南</a>
+<link rel="stylesheet" href="src/orchestration.css">
+<body class="orchestration-page">
+<header class="studio-top">
+  <a class="studio-mark" href="../index.html"><span aria-hidden="true">⌘</span><strong>SE Studio</strong><small>LAB 02</small></a>
+  <nav aria-label="项目导航">
+    <a href="../index.html">项目概览</a>
+    <a href="index.html" aria-current="page">编排工作台</a>
+    <a href="../examples.html">规格样例</a>
+    <a href="../guide.html">使用指南</a>
   </nav>
-  <footer>第十二组 · Lab 2</footer>
-</aside>
-<main class="ws-main">
-  <div class="studio-page-title">
-    <h1>规划工作台</h1>
-    <p>从产品设计规格生成可执行的开发计划</p>
-  </div>
-  <nav class="studio-tabs" aria-label="规划步骤">
-    <button type="button" data-stage="spec" aria-current="step">设计规格</button>
-    <button type="button" data-stage="tasks" disabled>开发任务</button>
-    <button type="button" data-stage="flow" disabled>执行编排</button>
-  </nav>
-  <header class="ws-bar">
-    <div class="ws-status">
-      <span class="ws-phase" data-role="phase">规格草稿</span>
-      <span class="ws-meta" data-role="refs"></span>
-    </div>
+</header>
+<main class="ws-main orchestration" id="orchestration">
+  <header class="orch-intro">
+    <div><div class="orch-kicker">SOFTWARE ENGINEERING WORKFLOW</div>
+    <h1>开发编排工作台</h1><p>从设计规格、任务分解到 Agent 派发与双重审查。</p></div>
+    <div class="orch-status"><span class="ws-phase" data-role="phase">规格草稿</span><span class="ws-meta" data-role="refs"></span></div>
   </header>
-  <p class="ws-message" data-role="message" role="status" aria-live="polite"></p>
 
-  <section class="studio-sheet" data-stage-panel="spec">
-    <div data-view="spec"></div>
-    <div class="studio-footer">
-      <button type="button" class="studio-run" data-action="run-workflow">生成工作流</button>
-    </div>
-  </section>
+  <div class="orch-layout">
+    <section class="studio-sheet orch-spec" aria-labelledby="project-definition">
+      <header class="orch-panel-heading"><span class="orch-kicker">01 / DESIGN SPEC</span><h2 id="project-definition">定义你的项目</h2><p>输入产品需求，或导入已有的设计规格。</p></header>
+      <div data-view="spec"></div>
+      <div class="studio-footer">
+        <button type="button" class="studio-run" data-action="run-workflow">提交规格并生成工作流 <span aria-hidden="true">→</span></button>
+      </div>
+    </section>
 
+    <section class="orch-canvas" aria-labelledby="canvas-title">
+      <header class="orch-canvas-head">
+        <div><div class="orch-kicker">02 / ORCHESTRATION</div><h2 id="canvas-title">工作流画布</h2>
+        <p data-orch-project>定义项目后，从这里查看开发编排与审查进度。</p></div>
+        <button type="button" data-canvas-expand aria-pressed="false"><span aria-hidden="true">⛶</span> <span data-expand-label>展开画布</span></button>
+      </header>
+      <p class="ws-message" data-role="message" role="status" aria-live="polite"></p>
+      <div class="wp-toolbar">
+        <div role="group" class="wp-switch" aria-label="画布视图">
+          <button type="button" data-canvas-view="packages" aria-pressed="true">项目工作包</button>
+          <button type="button" data-canvas-view="stages" aria-pressed="false">流程与审核</button>
+        </div>
+        <button type="button" data-go-stage="flow" data-open-plan hidden>查看执行编排 →</button>
+      </div>
+      <div class="orch-map wp-map" data-package-map>
+        <div class="orch-map-head"><strong>项目工作流</strong><span data-workstream-caption></span></div>
+        <div class="wp-empty" data-workstream-empty><span aria-hidden="true">⌘</span><strong>提交已确认的设计规格，生成项目工作包</strong><p>AI 会按产品的交付目标组织任务。点开卡片查看小任务、进度和人工讨论。</p></div>
+        <div class="wp-board" data-workstream-board aria-label="项目工作包" hidden></div>
+        <details class="wp-edge-info" data-workstream-handoffs hidden><summary>查看工作包之间的交接</summary><p>箭头由小任务依赖汇总。双向交接表示两个包的不同小任务互相提供产出，实际执行顺序以小任务图为准。</p><ul class="wp-handoffs"></ul></details>
+      </div>
+      <div class="orch-map" data-process-map hidden>
+        <div class="orch-map-head"><strong>流程总览</strong><div aria-label="流程状态图例" class="orch-legend"><span>待处理</span><span>进行中</span><span>已完成</span><span>需介入</span></div></div>
+        <div class="orch-nodes" aria-label="编排阶段"></div>
+        <div class="orch-map-foot">
+          <div class="orch-edge-legend" aria-label="阶段连线图例">
+            <span data-kind="main">主流程</span><span data-kind="input">复核依据</span><span data-kind="feedback">退回修改</span>
+          </div>
+          <details class="orch-edge-explanation"><summary>连线说明</summary><ul data-stage-links></ul></details>
+        </div>
+      </div>
+      <div class="orch-metrics" aria-label="执行计划统计"></div>
+      <div class="orch-crossing" data-branch-preview hidden></div>
+    </section>
+  <section class="orch-drawer" role="complementary" aria-label="阶段详情" hidden>
+    <header class="orch-drawer-head">
+      <div><div class="orch-kicker" data-drawer-kicker></div><h2 data-drawer-title></h2></div>
+      <button type="button" data-drawer-close aria-label="关闭阶段详情">×</button>
+    </header>
+    <div class="orch-drawer-body">
+      <section class="studio-sheet" data-stage-panel="project" hidden><p>用自然语言说明项目目标、用户、核心功能和明确排除的范围，也可以导入 Markdown、TXT 或已有规格。</p><button type="button" data-focus-spec="source">定位到需求输入</button></section>
+      <section class="studio-sheet" data-stage-panel="spec-ai" hidden><p>DeepSeek 可以从自然语言识别产品范围并生成规格。已有完整规格时，直接审查完整文档。审查建议需要由人确认。</p><div data-orch-spec-review></div><button type="button" data-focus-spec="ai">定位到规格 AI_Review</button></section>
+      <section class="studio-sheet" data-stage-panel="spec-human" hidden><p>核对使用场景、范围、验收条件和 AI 补充内容。人工确认后冻结本版规格，PM Agent 才能分解任务。</p><button type="button" data-focus-spec="human">定位到人工确认</button></section>
+      <section class="studio-sheet" data-stage-panel="package" hidden>
+        <div data-workstream-detail></div>
+        <div class="studio-section wp-discussion" data-package-discussion>
+          <h3>人工讨论与执行</h3>
+          <button type="button" data-go-stage="flow" data-package-confirm>检查并确认执行计划</button>
+          <div data-agent-slot="package"></div>
+        </div>
+      </section>
+      <section class="studio-sheet" data-stage-panel="agents" hidden><div data-agent-slot="agents"><div data-view="agents"></div></div></section>
   <section class="studio-sheet" data-stage-panel="tasks" hidden>
-    <div data-view="table"></div>
-    <div class="studio-section" data-view="detail"></div>
+    <p class="orch-no-data" data-tasks-empty>确认左侧规格后，PM Agent 会生成任务与验收条件。</p><div data-view="table"></div>
+    <div data-task-detail-slot="tasks"><div class="studio-section" data-view="detail"></div></div>
     <div class="studio-footer ws-actions">
       <button type="button" data-action="save" hidden>保存修订</button>
       <button type="button" data-action="validate">校验</button>
@@ -54,16 +94,24 @@
   </section>
 
   <section class="studio-sheet" data-stage-panel="flow" hidden>
-    <div class="studio-flow-toolbar ws-actions">
+    <p class="orch-no-data" data-flow-empty>生成任务后，校验依赖与覆盖率，并编排为执行批次。</p><div class="studio-flow-toolbar ws-actions">
       <a class="ws-graph-link" data-action="open-graph" href="../graph.html">打开完整图谱 ↗</a>
       <button type="button" data-action="confirm">确认版本</button>
       <button type="button" data-action="export">导出 JSON</button>
       <button type="button" data-action="export-md">导出 Markdown</button>
     </div>
     <div data-view="graph"></div>
+    <div data-task-detail-slot="flow"></div>
     <div class="studio-section" data-view="batches"></div>
+    <div class="studio-section" data-branch-detail hidden></div>
     <footer class="ws-versions" data-role="versions"></footer>
   </section>
+  <section class="studio-sheet" data-stage-panel="review" hidden>
+    <section class="studio-section" data-view="review" aria-label="代码审查与人工审核"></section>
+  </section>
+    </div>
+  </section>
+  </div>
 </main>
 <script type="module" src="src/main.js"></script>
 </body>

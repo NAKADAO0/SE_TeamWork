@@ -173,7 +173,7 @@ test("范围编辑阶段只确认范围，生成后恢复规格确认并支持�
     extraction: { stage: "full", source: "原始说明", confirmedScope: store.getState().specText },
   });
   view.update(store.getState());
-  assert.equal(button("confirm").textContent, "确认规格");
+  assert.equal(button("confirm").textContent, "人工 Review · 确认规格");
   assert.equal(button("plan").hidden, false);
   assert.equal(button("plan").disabled, true);
   assert.equal(button("reopen-scope").hidden, false);

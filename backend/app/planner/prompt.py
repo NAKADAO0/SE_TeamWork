@@ -7,7 +7,7 @@ import json
 
 from . import fields as F
 
-PROMPT_VERSION = "p1"
+PROMPT_VERSION = "p3"
 
 _LIMITS = {
     "max_tasks": 80,
@@ -49,12 +49,13 @@ SYSTEM = f"""你是软件工程中的任务规划者（PM）。
 1. 设计规格：产品范围、需求条目（含验收条件）、模块、设计条目、约束。
 2. 工作流模板：阶段划分、允许角色、是否要求验证。
 
-输出必须是一个顶层 JSON 对象，顶层仅包含以下三个键：
+输出必须是一个顶层 JSON 对象，顶层仅包含以下四个键：
 1. "tasks"：任务数组。数组中的每个任务对象【只能】包含以下 15 个字段（禁止在单个任务内放 assumptions、clarifications 或其他多余字段）：
 {_task_field_doc()}
 2. "assumptions"：字符串数组（顶层字段）。你为了让计划成立而做的假设，例如“默认复用现有登录态”。
 3. "clarifications"：对象数组（顶层字段），每项 {{"id": "Q1", "question": "…", "related_ids": ["R-MSG-01"]}}。
    规格里没写清、又会影响拆分的问题放这里，不要自己编答案。
+4. "workstreams"：项目级工作包数组，每项为 {{"id":"WP1","title":"贴合项目的交付目标","summary":"一句话说明这个包的产出","task_ids":["本计划中的小任务 ID"]}}。通常 3–6 个，最多 8 个；有四个或更多小任务时至少 2 个。工作包按可识别的业务能力、模块交付或联调目标组织，不要机械套用通用流程阶段名。每个小任务在工作包中恰好出现一次。跨包依赖只写在小任务的 depends_on 中，由编排器汇总。
 
 硬性规则：
 1. 每条需求至少有一个实现类任务（kind=implementation）和一个验证类任务（kind=verification）。
@@ -65,6 +66,7 @@ SYSTEM = f"""你是软件工程中的任务规划者（PM）。
 6. 若 inputs 消费了上游任务的产物（source="task_output", ref="任务ID/产物ID"），必须满足三点：(a) 该任务ID与产物ID真实存在；(b) inputs[].type 与上游 outputs[].type 一致；(c) 【即使已有间接依赖，也必须在当前任务的 depends_on 中显式列出该上游任务ID】。
 7. 若 inputs 引用设计条目（source="design"），ref 必须是规格 design_items 中存在的 ID，且 type 必须为 "design_contract"。
 8. 不要输出任何 JSON 之外的内容，不要用 markdown 代码块包裹。
+9. 把不存在前置关系的工作放在独立分支，不要为表现阶段顺序把所有任务串成单链。根据规格标出实际存在的跨角色交接：例如验证任务消费实现产物、集成任务汇合两个独立模块的产出；用 depends_on 写明依赖原因。仅当确实需要上游产物时才连线，不能添加假依赖或为了画图虚构任务。
 
 只输出 JSON。"""
 
