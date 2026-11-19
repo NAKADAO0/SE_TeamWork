@@ -49,7 +49,15 @@ Exclude document boilerplate and offers of further assistance.
 """
 
 
-def read_markdown(response: str) -> str:
+REVIEW_PROMPT = """
+Review the original DesignSpec for inconsistent rules, omitted test conditions and unclear assumptions.
+In addition to markdown, return "review" with "summary" (Chinese string) and "findings" (array).
+Each finding is an object with "severity" ("warning" or "info"), "section", "message", and "suggestion" (strings).
+Focus on issues grounded in the source; 0 to 8 findings. Preserve reviewed and original facts.
+The reviewed markdown remains a proposed draft pending human confirmation.
+"""
+
+def read_result(response: str) -> tuple[str, dict | None]:
     if not isinstance(response, str):
         raise ProviderError("AI 未返回文本")
     content = response.strip()
@@ -61,19 +69,37 @@ def read_markdown(response: str) -> str:
     markdown = result.get("markdown") if isinstance(result, dict) else None
     if not isinstance(markdown, str) or not markdown.strip() or len(markdown) > 60000:
         raise ProviderError("AI 返回的规格草稿无效")
-    return markdown.strip()
+    review = result.get("review") if isinstance(result, dict) else None
+    if isinstance(review, dict) and isinstance(review.get("summary"), str) and isinstance(review.get("findings"), list):
+        findings = [
+            {key: item[key][:600] for key in ("severity", "section", "message", "suggestion")}
+            for item in review["findings"][:8]
+            if isinstance(item, dict) and item.get("severity") in ("warning", "info")
+            and all(isinstance(item.get(key), str) for key in ("section", "message", "suggestion"))
+        ]
+        review = {"summary": review["summary"][:1200], "findings": findings}
+    else:
+        review = None
+    return markdown.strip(), review
 
 
-def extract_spec(text: str) -> dict:
+def read_markdown(response: str) -> str:
+    return read_result(response)[0]
+
+
+def extract_spec(text: str, *, review_mode: bool = False) -> dict:
     provider = HttpProvider.from_env()
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT + (REVIEW_PROMPT if review_mode else "")},
         {"role": "user", "content": json.dumps({"source_document": text}, ensure_ascii=False)},
     ]
-    markdown = read_markdown(provider.complete(messages))
+    markdown, review = read_result(provider.complete(messages))
     raw, normalized, _ = parse_spec_input({"text": markdown})
     issues = gap_check_spec(raw, normalized)
     result = {"text": markdown, "normalized": normalized, "issues": issues}
+
+    if review_mode:
+        result["review"] = review
 
     if issues["errors"] and (normalized.get("product") or normalized.get("requirements")):
         messages += [
@@ -82,9 +108,12 @@ def extract_spec(text: str) -> dict:
              "Resolve these validation errors through minimal, explicitly labeled assumptions: "
              + json.dumps(issues["errors"], ensure_ascii=False)},
         ]
-        repaired = read_markdown(provider.complete(messages))
+        repaired, repaired_review = read_result(provider.complete(messages))
         raw, normalized, _ = parse_spec_input({"text": repaired})
         repaired_issues = gap_check_spec(raw, normalized)
         if len(repaired_issues["errors"]) < len(issues["errors"]):
-            return {"text": repaired, "normalized": normalized, "issues": repaired_issues}
+            result = {"text": repaired, "normalized": normalized, "issues": repaired_issues}
+            if review_mode:
+                result["review"] = repaired_review or review
+            return result
     return result

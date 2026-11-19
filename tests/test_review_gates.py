@@ -182,6 +182,54 @@ class ReviewGatesTests(unittest.TestCase):
         self.decide()
         self.assertEqual(self.client.get(url).json(), before)
 
+    def test_live_review_uses_model_and_cannot_be_forged_by_demo_reports(self):
+        self.confirm()
+        resp = self.client.post(self.url, json={
+            "revision":1,"commit_sha":self.sha,"author":"developer","change_ref":"PR-1",
+            "mode":"live","diff":"+example code",
+        })
+        self.assertEqual(resp.status_code,201,resp.text)
+        self.assertNotIn("diff",resp.json()["current"])
+        self.assertEqual(self.report("logic").status_code,409)
+        self.assertEqual(self.decide().status_code,409)
+        reports = {key: {"note":"已复核提交差异","findings":[]} for key in ("quality","logic","dependencies")}
+        with patch("backend.review.generate_code_review",return_value=reports) as model:
+            checked = self.client.post(self.url+"/ai",json={"revision":1,"commit_sha":self.sha})
+            self.assertTrue(model.called)
+        self.assertEqual(checked.status_code,200,checked.text)
+        self.assertEqual(checked.json()["current"]["status"],"awaiting_human")
+        self.assertFalse(checked.json()["downstream_ready"])
+        self.assertTrue(self.decide().json()["downstream_ready"])
+
+    def test_live_ai_recheck_rejects_late_result_after_new_commit(self):
+        self.confirm()
+        submission={"revision":1,"author":"developer","change_ref":"PR-1","mode":"live","diff":"+example"}
+        self.assertEqual(self.client.post(self.url,json=submission | {"commit_sha":self.sha}).status_code,201)
+        entered, release = Event(), Event()
+        def model(*_):
+            entered.set()
+            if not release.wait(5):
+                raise RuntimeError("test synchronization timed out")
+            return {k: {"note":"review", "findings":[]} for k in ("quality","logic","dependencies")}
+        with patch("backend.review.generate_code_review",side_effect=model):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                running=pool.submit(self.client.post,self.url+"/ai",json={"revision":1,"commit_sha":self.sha})
+                try:
+                    self.assertTrue(entered.wait(5))
+                    new="2"*40
+                    resp=self.client.post(self.url,json=submission | {"commit_sha":new,"previous_sha":self.sha,"diff":"+next"})
+                    self.assertEqual(resp.status_code,201)
+                    self.assertEqual(self.client.post(self.url,json={
+                        "revision":1,"author":"developer","change_ref":"PR-1","commit_sha":"3"*40,"previous_sha":new,
+                    }).status_code,409)
+                finally:
+                    release.set()
+                self.assertEqual(running.result(timeout=5).status_code,409)
+        snap=self.client.get(self.url,params={"revision":1}).json()
+        self.assertEqual(snap["current"]["commit_sha"],new)
+        self.assertFalse(snap["downstream_ready"])
+        self.assertEqual(snap["current"]["checks"]["logic"][0]["outcome"],"pending")
+
     def test_human_rejection_is_terminal(self):
         self.confirm()
         self.start()

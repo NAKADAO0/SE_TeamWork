@@ -22,16 +22,17 @@ export function mountSpecEditor(root, { store, actions }) {
     <textarea data-role="text" spellcheck="false" aria-label="设计规格 JSON 或 Markdown"
       placeholder="粘贴 DesignSpec JSON 或 Markdown（# 产品名称 / ## 产品范围 / ## 需求条目 / ## 模块 / ## 设计条目 / ## 约束）"></textarea>
     <div class="ws-row">
-      <button type="button" data-action="extract">AI 整理</button>
+      <button type="button" data-action="extract" class="primary">AI_Review</button>
       <button type="button" data-action="check">检查缺口</button>
-      <button type="button" data-action="confirm">确认规格</button>
+      <button type="button" data-action="confirm">人工 Review · 确认规格</button>
       <button type="button" data-action="reopen" hidden>修改</button>
       <button type="button" data-action="plan" class="primary">生成计划</button>
     </div>
     <details class="studio-settings" data-role="source-panel" hidden>
-      <summary>查看整理前的说明书</summary>
+      <summary>对照 Review 前的原文</summary>
       <pre data-role="source-text"></pre>
     </details>
+    <section class="spec-review-report" data-role="spec-review" hidden aria-label="规格 AI_Review 报告"></section>
     <div data-role="issues" class="ws-issues"></div>
     <p data-role="ref" class="ws-meta"></p>
     <details class="studio-settings">
@@ -175,6 +176,12 @@ export function mountSpecEditor(root, { store, actions }) {
           ? "规格已冻结"
           : "规格未确认，生成前需要先确认";
 
+      const report = root.querySelector('[data-role="spec-review"]');
+      report.hidden = !state.specReview;
+      const review = state.specReview;
+      report.innerHTML = review ? `<h3>规格 AI_Review 报告</h3><p>${escapeHtml(review.summary)}</p>
+        ${(review.findings ?? []).map(finding=>`<article><strong>${escapeHtml(finding.section)}</strong>
+        <p>${escapeHtml(finding.message)}</p><p>建议：${escapeHtml(finding.suggestion)}</p></article>`).join("")}` : "";
       renderIssues(state);
     },
   };

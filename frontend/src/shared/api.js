@@ -215,6 +215,8 @@ function createHttpApi(base) {
   return {
     mode: "http",
     base: prefix,
+    getConfirmedBundle: (planId, revision) => request("GET",
+      `/plans/${encodeURIComponent(planId)}/export?revision=${encodeURIComponent(revision)}&format=json`),
     getReview: (planId, revision) =>
       request("GET", `/plans/${encodeURIComponent(planId)}/review?revision=${encodeURIComponent(revision)}`),
     updateReview: (planId, action, body) =>
@@ -226,7 +228,7 @@ function createHttpApi(base) {
       const res = await request("GET", "/plans/chat-demo");
       return res.plan ?? res;
     },
-    extractSpec: (text) => request("POST", "/specs/extract", { text }),
+    extractSpec: (text) => request("POST", "/specs/review", { text }),
     submitSpec: ({ draft, text }) =>
       request("POST", "/specs", draft !== undefined && draft !== null ? { draft } : { text }),
     confirmSpec: ({ specId, version }) =>

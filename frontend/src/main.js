@@ -32,7 +32,7 @@ const messageEl = document.querySelector('[data-role="message"]');
 const versionsEl = document.querySelector('[data-role="versions"]');
 const stages = [...document.querySelectorAll("[data-stage]")];
 const panels = [...document.querySelectorAll("[data-stage-panel]")];
-let stage = restored?.state?.plan && ["spec", "tasks", "flow"].includes(restored.stage) ? restored.stage : "spec";
+let stage = restored?.state?.plan && ["spec", "tasks", "flow", "review"].includes(restored.stage) ? restored.stage : "spec";
 
 function saveSession() {
   const state = store.getState();
@@ -188,11 +188,11 @@ async function extractSpec() {
   const source = state.specText.trim();
   if (state.busy || state.spec?.locked || !source) return;
   if (api.mode !== "http" || !liveLlmConfigured) {
-    notice("error", "AI 整理需要已配置实时模型的后端。");
+    notice("error", "AI_Review需要已配置实时模型的后端。");
     return;
   }
   store.dispatch({ type: "EXTRACTION_BUSY", busy: true });
-  notice("info", "DeepSeek 正在整理说明书并补全规划所需信息。");
+  notice("info", "DeepSeek 正在审查设计规格并生成可核对的修订稿。");
   try {
     const result = await api.extractSpec(source);
     if (store.getState().specText !== state.specText) return;
@@ -201,13 +201,14 @@ async function extractSpec() {
       type: "SPEC_LOADED", draft: result.normalized, text: result.text, source: "ai-extraction",
     });
     store.dispatch({ type: "SPEC_CHECKED", issues: result.issues });
+    store.dispatch({ type: "SPEC_AI_REVIEW", report: result.review });
     const missing = result.issues.errors.length;
     notice(missing ? "warn" : "info", missing
-      ? `已整理出草稿，还有 ${missing} 处缺口。请对照原文补充后再确认。`
-      : "规格已整理。请核对 AI 补充假设，再确认规格。");
+      ? `AI_Review 已生成草稿，还有 ${missing} 处缺口。请对照原文补充后再确认。`
+      : "AI_Review 已完成。请进行人工 Review，核对发现与补充假设后确认。");
   } catch (error) {
     if (error instanceof ApiError && error.code === "HTTP_404") {
-      notice("error", "当前后端版本缺少 AI 整理接口。请在项目根目录重新启动后端，再打开对应端口的工作台。");
+      notice("error", "当前后端版本缺少 AI_Review接口。请在项目根目录重新启动后端，再打开对应端口的工作台。");
     } else {
       fail(error);
     }
@@ -447,6 +448,7 @@ async function runConfirm() {
       revision: result.revision ?? state.plan.revision,
       execution_plan_id: result.execution_plan_id,
     });
+    notice("info", "执行计划已确认，可进入「审查中心」运行 AI_Review 和人工 Review。");
   } catch (error) {
     fail(error);
   }
@@ -601,7 +603,7 @@ const MODE_LABEL = {
 
 function updateReview() {
   const state = store.getState();
-  if (stage !== "flow") return;
+  if (stage !== "review") return;
   review.update(api, state.phase === PHASE.PLAN_CONFIRMED && !state.stale ? state.plan : null);
 }
 function render(state) {
@@ -624,7 +626,8 @@ function render(state) {
   buttons.workflow.disabled = !state.spec?.locked || state.busy || api.mode === "fixture";
   buttons.workflow.title = api.mode === "fixture" ? "请通过后端服务打开工作台" : "分解任务、校验并编排";
   for (const button of stages) {
-    button.disabled = button.dataset.stage !== "spec" && !state.plan;
+    button.disabled = (button.dataset.stage !== "spec" && !state.plan) ||
+      (button.dataset.stage === "review" && (state.phase !== PHASE.PLAN_CONFIRMED || state.stale));
   }
   if (!state.plan && stage !== "spec") showStage("spec");
   buttons.save.hidden = api.mode !== "http" || !state.plan;
@@ -686,6 +689,13 @@ async function resolveApi() {
     }
     templates = await api.loadTemplates();
     views.spec.setTemplates(templates);
+    const requestedPlan = params.get("plan");
+    const revision = Number(params.get("revision"));
+    if (requestedPlan && Number.isSafeInteger(revision) && revision > 0 && api.mode === "http") {
+      const bundle = await api.getConfirmedBundle(requestedPlan, revision);
+      store.dispatch({type:"RESTORE_CONFIRMED_PLAN", bundle});
+      showStage(params.get("stage") === "flow" ? "flow" : "review");
+    }
     render(store.getState());
     window.__workspace = { store, api, actions };
   } catch (error) {

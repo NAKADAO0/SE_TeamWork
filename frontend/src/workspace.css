@@ -565,3 +565,11 @@ button.active {
 .review-flow li { color: #526376; display: flex; align-items: center; gap: 8px; font-size: .88rem; }
 .review-flow li + li::before { content: "→"; color: #718298; }
 .review-flow li[aria-current="step"] { color: #3652a1; font-weight: 750; }
+
+.spec-review-report,.review-submission{margin:16px 0;padding:14px;border:1px solid #d6e0f0;border-radius:10px;background:#f7f9ff}
+.spec-review-report article{margin-top:10px;padding:8px 12px;background:white;border-left:3px solid #677ccd}
+.spec-review-report p{margin:4px 0}
+.review-submission summary{cursor:pointer;font-weight:650}.review-submission label,.review-decision label{display:block;margin:8px 0}
+.review-submission :is(input,textarea),.review-decision input{display:block;width:100%;padding:7px;margin-top:4px;border:1px solid #ccd7e8;border-radius:8px}
+.review-submission textarea{min-height:120px}
+[data-view="review"]>h3{margin:18px 0 8px}

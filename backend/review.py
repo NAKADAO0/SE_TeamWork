@@ -2,12 +2,16 @@
 from contextlib import closing
 from datetime import datetime, timezone
 import json
+import hashlib
+from threading import Lock
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, ValidationError
 
 from .workflow import transaction
+from .ai_code_review import generate_code_review
+from .app.planner.models import ProviderError
 
 Check = Literal["quality", "logic", "dependencies"]
 CHECKS = ("quality", "logic", "dependencies")
@@ -28,6 +32,8 @@ class Submission(Snapshot):
     previous_sha: Sha | None = None
     author: Name
     change_ref: Name
+    mode: Literal['demo', 'live'] = 'demo'
+    diff: str | None = Field(default=None,max_length=28000)
 
 
 class Finding(BaseModel):
@@ -45,6 +51,17 @@ class Report(Attempt):
     outcome: Literal["completed", "transient_error", "failed"]
     note: Note | None = None
     findings: list[Finding] = Field(default_factory=list, max_length=50)
+
+
+class ModelSection(BaseModel):
+    note: Note
+    findings: list[Finding] = Field(max_length=50)
+
+
+class ModelReview(BaseModel):
+    quality: ModelSection
+    logic: ModelSection
+    dependencies: ModelSection
 
 
 class Decision(Snapshot):
@@ -85,9 +102,13 @@ def read_state(db, pid, revision):
 
 
 def public(state, latest):
+    def sanitized(round_):
+        return {key: value for key,value in round_.items() if key != "diff"} if round_ else None
+    current = state["current"]
     return {
-        **state, "stale": not latest,
-        "downstream_ready": latest and (state["current"] or {}).get("status") == "approved",
+        **state, "current": sanitized(current), "history":[sanitized(item) for item in state["history"]],
+        "stale": not latest,
+        "downstream_ready": latest and (current or {}).get("status") == "approved",
     }
 
 
@@ -152,7 +173,8 @@ def evaluate(state, round_):
 
 
 def review_router(store):
-    router = APIRouter(prefix="/plans/{pid}/review", tags=["Review gates (demo)"])
+    router = APIRouter(prefix="/plans/{pid}/review", tags=["Review gates"])
+    ai_lock, in_flight = Lock(), set()
 
     @router.get("")
     def get_review(pid: str, revision: int = Query(ge=1)):
@@ -171,31 +193,80 @@ def review_router(store):
 
     @router.post("", status_code=201)
     def submit(pid: str, request: Submission):
+        if request.mode == "live" and not (request.diff or "").strip():
+            raise HTTPException(422, "实时 AI_Review 需要当前提交的代码差异")
+        if request.mode == "demo" and request.diff is not None:
+            raise HTTPException(422, "演示轮不接收代码差异")
+        digest = hashlib.sha256(request.diff.encode()).hexdigest() if request.diff else None
         with transaction(store) as db:
             state, confirmation = load_writable(db, pid, request)
             previous = state["current"]
             if previous and previous["commit_sha"] == request.commit_sha:
-                if previous["author"] != request.author or previous["change_ref"] != request.change_ref:
-                    raise HTTPException(409, "当前提交已绑定其他审查信息")
+                if (previous["author"] != request.author or previous["change_ref"] != request.change_ref or
+                        previous.get("mode","demo") != request.mode or previous.get("diff_digest") != digest):
+                    raise HTTPException(409, "当前提交已绑定其他审查信息或差异内容")
                 return public(state, True)
             if request.previous_sha != (previous or {}).get("commit_sha"):
                 raise HTTPException(409, "提交已变化，请刷新后重新提交")
             if previous:
                 if previous["status"] in ("needs_attention", "rejected", "stopped"):
                     raise HTTPException(409, "当前轮已阻塞或结束，不能直接开启下一轮")
-                if previous["author"] != request.author or previous["change_ref"] != request.change_ref:
-                    raise HTTPException(409, "同一修订须沿用已绑定的变更和作者")
+                previous_mode = previous.get("mode","demo")
+                if previous_mode == "live" and request.mode != "live":
+                    raise HTTPException(409, "实时审查不能降级为演示报告")
+                if previous_mode == request.mode and (previous["author"] != request.author or previous["change_ref"] != request.change_ref):
+                    raise HTTPException(409, "同一种审查须沿用已绑定的变更和作者")
+                if previous_mode != request.mode:
+                    state["rework_count"] = 0
                 if any(r["commit_sha"] == request.commit_sha for r in state["history"]):
                     raise HTTPException(409, "不能重复使用本修订中的历史提交")
-                state["history"].append(previous)
+                state["history"].append({key:value for key,value in previous.items() if key != "diff"})
+            state["mode"] = request.mode
             state["current"] = {
                 "round": len(state["history"]) + 1, "commit_sha": request.commit_sha,
                 "execution_plan_id": confirmation["execution_plan_id"],
                 "change_ref": request.change_ref, "author": request.author, "submitted_at": now(),
                 "status": "checking", "automatic_decision": None, "decision": None,
+                "mode":request.mode, "diff":request.diff, "diff_digest":digest,
                 "checks": {name: [{"attempt": 1, "outcome": "pending"}] for name in CHECKS},
             }
             return save(db, pid, state)
+
+    @router.post("/ai")
+    def ai_review(pid: str, request: Snapshot):
+        key = (pid, request.revision, request.commit_sha)
+        with ai_lock:
+            if key in in_flight:
+                raise HTTPException(409,"当前提交的 AI_Review 正在运行")
+            in_flight.add(key)
+        try:
+            with transaction(store) as db:
+                _, round_ = load_round(db,pid,request)
+                if round_.get("mode") != "live" or round_["status"] != "checking":
+                    raise HTTPException(409,"仅待检查的实时提交可调用 DeepSeek")
+                diff, digest = round_["diff"], round_["diff_digest"]
+                number = round_["round"]
+                document = db.execute("SELECT document FROM revisions WHERE plan_id=? AND revision=?",
+                                      (pid,request.revision)).fetchone()
+                tasks = json.loads(document[0]).get("tasks",[])
+                context = [{k: task.get(k) for k in ("id","title","requirement_ids","acceptance")}
+                           for task in tasks[:60]]
+            try:
+                reviewed = ModelReview.model_validate(generate_code_review(diff,context)).model_dump()
+            except (ProviderError, ValidationError, ValueError) as exc:
+                raise HTTPException(502,"DeepSeek 未返回完整的三类审查报告；此轮仍未通过，可重试") from exc
+            with transaction(store) as db:
+                state, round_ = load_round(db,pid,request)
+                if (round_.get("mode") != "live" or round_["status"] != "checking" or
+                        round_["round"] != number or round_["diff_digest"] != digest):
+                    raise HTTPException(409,"提交已经变化；旧 AI_Review 不会保存")
+                for name, data in reviewed.items():
+                    round_["checks"][name][-1].update(data, outcome="completed", received_at=now(), source="deepseek")
+                evaluate(state,round_)
+                return save(db,pid,state)
+        finally:
+            with ai_lock:
+                in_flight.discard(key)
 
     @router.post("/reports")
     def report(pid: str, request: Report):
@@ -203,6 +274,8 @@ def review_router(store):
             raise HTTPException(422, "失败报告须提供原因，不能包含检查发现")
         with transaction(store) as db:
             state, round_ = load_round(db, pid, request)
+            if round_.get("mode") == "live":
+                raise HTTPException(409, "实时轮次只能写入服务端获取的 AI_Review 报告")
             attempt = round_["checks"][request.check][-1]
             result = request.model_dump(include={"attempt", "outcome", "note", "findings"})
             if all(attempt.get(key) == value for key, value in result.items()):

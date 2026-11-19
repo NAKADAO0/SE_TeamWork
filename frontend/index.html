@@ -27,6 +27,7 @@
     <button type="button" data-stage="spec" aria-current="step">设计规格</button>
     <button type="button" data-stage="tasks" disabled>开发任务</button>
     <button type="button" data-stage="flow" disabled>执行编排</button>
+    <button type="button" data-stage="review" disabled>审查中心</button>
   </nav>
   <header class="ws-bar">
     <div class="ws-status">
@@ -62,8 +63,10 @@
     </div>
     <div data-view="graph"></div>
     <div class="studio-section" data-view="batches"></div>
-    <section class="studio-section" data-view="review" aria-label="代码审查与人工审核"></section>
     <footer class="ws-versions" data-role="versions"></footer>
+  </section>
+  <section class="studio-sheet" data-stage-panel="review" hidden>
+    <section class="studio-section" data-view="review" aria-label="代码审查与人工审核"></section>
   </section>
 </main>
 <script type="module" src="src/main.js"></script>

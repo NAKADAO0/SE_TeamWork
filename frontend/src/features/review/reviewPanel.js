@@ -62,8 +62,8 @@ export function mountReview(root) {
   }
 
   function draw() {
-    root.replaceChildren(node("h2", "开发交付 · 代码审查与人工审核"));
-    root.append(node("p", "模拟审查证据与身份，服务端实际执行放行规则。此操作不会读取 GitHub、调用 CI 或合并 PR。", "review-note"));
+    root.replaceChildren(node("h2", "审查中心 · AI_Review 与人工 Review"));
+    root.append(node("p", "AI_Review 审查你提交的代码差异，人工 Review 决定是否放行。不会自动读取 GitHub、执行测试或合并 PR。", "review-note"));
     if (!context) {
       root.append(node("p", "请使用后端工作台并确认当前执行计划。", "review-note"));
       return;
@@ -85,7 +85,7 @@ export function mountReview(root) {
     const highlight = !round ? 0 : round.status === "approved" && !data.stale ? 4
       : ["awaiting_human", "rejected"].includes(round.status) || (round.status === "changes_requested" && round.blocked_by === "human") ? 3
       : round.automatic_decision ? 2 : 1;
-    for (const [index, label] of ["开发提交", "并行检查", "自动门禁", "人工审核", "QA / 交付"].entries()) {
+    for (const [index, label] of ["开发提交", "AI_Review", "规则门禁", "人工 Review", "QA / 交付"].entries()) {
       const step = node("li", label);
       if (index === highlight && !data.stale) step.setAttribute("aria-current", "step");
       flow.append(step);
@@ -100,7 +100,7 @@ export function mountReview(root) {
     const mutate = (action, body) => run(({ api, id, revision }) => api.updateReview(id, action, {
       revision, commit_sha: round?.commit_sha, ...body,
     }));
-    if (!data.stale && (!round || ["checking", "retryable", "awaiting_human", "approved", "changes_requested"].includes(round.status))) {
+    if (!data.stale && round?.mode !== "live" && (!round || ["checking", "retryable", "awaiting_human", "approved", "changes_requested"].includes(round.status))) {
       button(round ? "提交下一版（演示）" : "提交开发产物（演示）", () => {
         const hash = [...crypto.getRandomValues(new Uint8Array(20))]
           .map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -110,8 +110,37 @@ export function mountReview(root) {
         });
       }, controls);
     }
+    if (!data.stale && (!round || ["checking","awaiting_human","approved","changes_requested","retryable"].includes(round.status))) {
+      const form = node("details", null, "review-submission");
+      form.append(node("summary", round ? "登记下一版代码差异" : "登记代码差异 · 实时 AI_Review"));
+      const fields = {};
+      for (const [key, title, limit, value] of [
+        ["commit_sha","Git 提交 SHA（40 位）",40,""], ["author","提交作者",100,round?.author ?? ""],
+        ["change_ref","变更引用",100,round?.change_ref ?? ""], ["diff","代码差异（从 Git 复制，请先去除密钥）",28000,""],
+      ]) {
+        const label=node("label",title);
+        const field=node(key==="diff"?"textarea":"input");
+        field.maxLength=limit; field.value=value;
+        if(key==="diff")field.rows=5;
+        fields[key]=field;label.append(field);form.append(label);
+      }
+      const submit=button("登记提交",()=>mutate("", {
+        ...Object.fromEntries(Object.entries(fields).map(([k,f])=>[k,k==="diff"?f.value:f.value.trim()])),
+        mode:"live", previous_sha:round?.commit_sha,
+      }),form);
+      const validate=()=>{submit.disabled=busy || !/^[0-9a-f]{40}$/.test(fields.commit_sha.value.trim()) ||
+        !fields.author.value.trim() || !fields.change_ref.value.trim() || !fields.diff.value.trim();};
+      for(const field of Object.values(fields))field.addEventListener("input",validate);
+      validate();
+      root.append(form);
+    }
     if (!round) return;
     root.append(node("p", `第 ${round.round} 轮 · 提交 ${round.commit_sha.slice(0, 12)} · 计划 r${data.revision} · 已返工 ${data.rework_count} 次`, "review-note"));
+    root.append(node("h3", round.mode === "live" ? "01 · DeepSeek AI_Review" : "01 · AI_Review（模拟报告）"));
+    if (!data.stale && round.mode === "live" && round.status === "checking") {
+      button("运行 DeepSeek AI_Review", () => mutate("ai", {}), controls);
+    }
+    if (round.diff_digest) root.append(node("p", `差异摘要 SHA-256：${round.diff_digest}`, "review-note"));
     const grid = node("div", null, "review-checks");
     root.append(grid);
     const reportBody = (check, attempt, fields = {}) => ({
@@ -141,7 +170,7 @@ export function mountReview(root) {
       }
       grid.append(card);
     }
-    if (!data.stale && ["checking", "retryable"].includes(round.status)) {
+    if (!data.stale && round.mode !== "live" && ["checking", "retryable"].includes(round.status)) {
       const pending = Object.entries(round.checks).filter(([, attempts]) => attempts.at(-1).outcome === "pending");
       if (pending.length) {
         const reportPending = ({ api, id }, logicFinding) => Promise.all(pending.map(([check, attempts]) => {
@@ -160,9 +189,17 @@ export function mountReview(root) {
         })), controls);
       }
     }
+    root.append(node("h3", "02 · 人工 Review"));
+    if (round.status !== "awaiting_human" && !round.decision)
+      root.append(node("p", "等待 AI_Review 门禁通过后，人工审核才可提交决定。", "review-note"));
     if (!data.stale && round.status === "awaiting_human") {
       const box = node("div", null, "review-decision");
-      const label = node("label", "人工评审意见（演示评审人）");
+      const who = node("label", "评审人（本地填写身份）");
+      const reviewer = node("input");
+      reviewer.maxLength=100;
+      reviewer.value=round.mode==="live"?"":"demo-reviewer";
+      who.append(reviewer);
+      const label = node("label", "人工评审意见");
       const reason = node("textarea");
       reason.rows = 2;
       reason.maxLength = 2000;
@@ -171,12 +208,14 @@ export function mountReview(root) {
       const actions = node("div", null, "ws-actions");
       for (const [decision, title] of [["approve", "批准当前提交"], ["request_changes", "要求修改"], ["reject", "拒绝"]]) {
         const action = button(title, () => mutate("decision", {
-          reviewer: "demo-reviewer", decision, reason: reason.value.trim(),
+          reviewer: reviewer.value.trim(), decision, reason: reason.value.trim(),
         }), actions);
         action.disabled = true;
-        reason.addEventListener("input", () => { action.disabled = busy || !reason.value.trim(); });
+        const validate=()=>{ action.disabled = busy || !reason.value.trim() || !reviewer.value.trim(); };
+        reason.addEventListener("input",validate);
+        reviewer.addEventListener("input",validate);
       }
-      box.append(label, actions);
+      box.append(who, label, actions);
       root.append(box);
     }
     if (!data.stale && round.status === "needs_attention") {

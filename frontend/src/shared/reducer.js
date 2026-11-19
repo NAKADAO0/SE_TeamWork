@@ -85,10 +85,13 @@ function replaceTask(plan, taskId, patch) {
 
 export function reduce(state, action) {
   switch (action.type) {
+    case "SPEC_AI_REVIEW":
+      return { ...state, specReview: action.report ?? null };
     case "SPEC_TEXT_CHANGE": {
       const spec = state.spec ? { ...state.spec, locked: false } : null;
       return {
         ...state,
+        specReview: null,
         specText: action.text,
         spec,
         specIssues: null,
@@ -133,6 +136,7 @@ export function reduce(state, action) {
       const productName = typeof draft?.product === "string" ? draft.product : draft?.product?.name;
       return {
         ...state,
+        specReview: null,
         specText: action.text ?? JSON.stringify(draft, null, 2),
         specToken: state.specToken + 1,
         spec: { draft, locked: false, ref: null, source: action.source ?? "" },
@@ -147,6 +151,7 @@ export function reduce(state, action) {
       if (!state.spec) return state;
       return {
         ...state,
+        specReview: null,
         spec: { ...state.spec, locked: false },
         phase: PHASE.SPEC_DRAFT,
         message: message("warn", "已解除确认，可继续修改；再次确认会生成新的规格版本"),
@@ -204,6 +209,20 @@ export function reduce(state, action) {
         };
       }
       return { ...state, job };
+    }
+
+    case "RESTORE_CONFIRMED_PLAN": {
+      const bundle = action.bundle;
+      const plan = bundle.plan;
+      const draft = plan.normalized_spec ?? plan.spec ?? {};
+      const execution = { ...bundle.execution, batches: bundle.execution.batch_details ??
+        bundle.execution.batches.map((tasks,index)=>({ index,tasks,bindings:{},waiting:[] })) };
+      return { ...initialState(), plan, execution, validation: bundle.validation,
+        persistedRevision: bundle.revision, phase: PHASE.PLAN_CONFIRMED,
+        history: [snapshot(plan, PHASE.PLAN_CONFIRMED)],
+        spec: { locked:true, ref:plan.spec_ref, draft }, specText: JSON.stringify(draft,null,2),
+        specToken: state.specToken+1, selectedTaskId:plan.tasks?.[0]?.id,
+        message:message("info", `已打开已确认快照 ${bundle.plan_id} r${bundle.revision}`) };
     }
 
     case "PLAN_LOADED":
