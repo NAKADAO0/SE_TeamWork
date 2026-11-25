@@ -4,23 +4,26 @@ from typing import Any, Literal
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 from ..app.contracts.spec_intake import parse_spec_input
-from ..workflow import live_llm_env_ready
+from ..workflow import live_llm_env_ready, Config
 from . import storage as db
 from .adapter import PlanningAdapter
 from .prompts import STAGES, LABELS
-from .runtime import work
+from .runtime import work, reassess_stage
+from .convergence import budget, topic_key
 
 class NewRun(BaseModel):
     source: str = Field(min_length=1, max_length=60000)
     input_mode: Literal["requirements", "spec"] = "requirements"
 
 class Command(BaseModel):
-    action: Literal["start", "resume", "step", "pause", "confirm", "answer", "replan", "accept_risk"]
+    action: Literal["start", "resume", "step", "pause", "confirm", "answer", "replan", "accept_risk", "extend_clarification", "reassess", "compile"]
     expected_sequence: int = Field(ge=1)
     note: str = Field(default="", max_length=12000)
     target_stage: Literal["requirements", "product", "architecture"] | None = None
     spec: dict[str, Any] | None = None
+    acknowledge_provisional: bool = False
     answers: list[dict[str, str]] = Field(default_factory=list, max_length=5)
+    config: Config | None = None
 
 
 def definitions():
@@ -33,7 +36,7 @@ def definitions():
         **{stage: dict(nodes=nodes, edges=[dict(source="collaborate", target="generate", type="forward"),
                 dict(source="generate", target="review", type="forward"), dict(source="review", target="confirm", type="conditional"),
                 dict(source="review", target="generate", type="feedback")]) for stage in STAGES},
-        "planning": dict(nodes=[dict(id="spec_adapter", label="复用规格契约", renderer="artifact"), dict(id="plan", label="原 PM 任务规划", renderer="tasks")],
+        "planning": dict(nodes=[dict(id="spec_adapter", label="整理设计规格", renderer="artifact"), dict(id="plan", label="生成任务计划", renderer="tasks")],
                          edges=[dict(source="spec_adapter", target="plan", type="forward")]),
         "confirmation": dict(nodes=[dict(id="validate", label="契约与依赖校验", renderer="review"), dict(id="compile", label="资源编排", renderer="dag"), dict(id="confirm", label="人工确认计划", renderer="interaction")],
                              edges=[dict(source="validate", target="compile", type="forward"), dict(source="compile", target="confirm", type="forward")])})
@@ -81,9 +84,22 @@ def studio_router(store, workflow, delivery):
         status = state["status"]
         stage = state["stage"]
         launch = False
-        if action in ("start", "resume", "step", "answer", "replan") and not live_llm_env_ready():
+        if action in ("start", "resume", "step", "answer", "replan", "extend_clarification") and not live_llm_env_ready():
             raise HTTPException(503, "请先配置 PM_BASE_URL、PM_API_KEY、PM_MODEL，再启动真实 Agent")
+        if action == "compile":
+            if stage != "confirmation" or status != "awaiting_confirmation" or body.config is None:
+                raise HTTPException(409, "仅待确认的计划可以调整资源并重新编排")
+            db.change(store, rid, "compile.started", mutate=lambda s: s.update(status="confirming"), expected=body.expected_sequence)
+            try:
+                execution = adapter.compile(state["plan_ref"], body.config.model_dump(exclude_none=True))
+            except Exception:
+                db.change(store, rid, "compile.failed", mutate=lambda s: s.update(status="awaiting_confirmation"))
+                raise
+            return db.change(store, rid, "plan.recompiled", {"config": execution.get("config")},
+                             lambda s: s.update(status="awaiting_confirmation", execution=execution))
         if action == "confirm" and status == "awaiting_confirmation" and stage == "confirmation":
+            if state.get("execution", {}).get("compiled") is False:
+                raise HTTPException(409, "资源编排受阻，请调整资源后重新计算")
             db.change(store, rid, "command.confirm", {"note": body.note},
                       lambda s: s.update(status="confirming"), body.expected_sequence)
             try:
@@ -108,18 +124,25 @@ def studio_router(store, workflow, delivery):
                     raise HTTPException(409, "当前没有可确认的产物")
                 if stage in STAGES:
                     current = s["stages"][stage]
-                    if not current["review"]["passed"] and not current.get("risk_accepted"):
+                    if current.get("provisional") and not body.acknowledge_provisional:
+                        raise HTTPException(409,"请先明确确认 AI 暂定方案及其风险影响")
+                    if current.get("hard_conflicts"):
+                        raise HTTPException(409,"明确约束或程序校验仍冲突，请先编辑方案")
+                    if not current["review"]["passed"] and not current.get("risk_accepted") and not (current.get("provisional") and body.acknowledge_provisional):
                         raise HTTPException(409, "审查未通过，不能确认")
                     s["spec"] = current["draft"]["spec"]
                     current["confirmed"] = True
                     current["confirmed_at"] = db.now()
                     current["confirmation_note"] = body.note
+                    current["provisional_accepted"] = bool(current.get("provisional"))
                     index = STAGES.index(stage)
                     s.update(stage=STAGES[index+1] if index < 2 else "planning", status="ready")
                 elif stage == "confirmation":
                     s.update(status="complete")
                 else:
                     raise HTTPException(409, "此阶段不能确认")
+            elif action == "reassess":
+                reassess_stage(s)
             elif action == "accept_risk":
                 if status != "needs_input" or stage not in STAGES:
                     raise HTTPException(409, "当前没有可接受风险的方案")
@@ -131,7 +154,7 @@ def studio_router(store, workflow, delivery):
                 current["risk_accepted"] = dict(note=body.note, timestamp=db.now(), issues=current["review"]["issues"])
                 s["answers"].append(dict(stage_id=stage, text="用户明确接受风险："+body.note, timestamp=db.now()))
                 s.update(status="awaiting_confirmation")
-            elif action in ("answer", "replan"):
+            elif action in ("answer", "replan", "extend_clarification"):
                 if status in ("running", "pausing", "confirming"):
                     raise HTTPException(409, "请先暂停，再修改运行")
                 if not body.note.strip():
@@ -143,12 +166,25 @@ def studio_router(store, workflow, delivery):
                 if STAGES.index(target) > current_index:
                     raise HTTPException(409, "不能跳过尚未确认的上游阶段")
                 previous = s["stages"].get(target, {})
+                stage_budget=budget(s,target)
+                if action=="answer":
+                    if stage_budget["used"]>=stage_budget["limit"]:
+                        raise HTTPException(409,"本阶段答疑额度已用完。可编辑方案，或明确追加一轮澄清。")
+                    stage_budget["used"]+=1
+                if action=="extend_clarification":
+                    stage_budget["limit"]+=1
+                s.setdefault("stage_budgets",{})[target]=stage_budget
                 requests = previous.get("draft", {}).get("decision_requests") or [dict(id="Q"+str(index+1), question=question) for index,question in enumerate(previous.get("questions", []))]
                 by_id = {request["id"]: request for request in requests}
                 if any(answer.get("question_id") not in by_id for answer in body.answers):
                     raise HTTPException(422, "回答引用了当前阶段不存在的问题，请刷新后重试")
                 question_context = [by_id[answer["question_id"]] for answer in body.answers]
-                s["answers"].append(dict(stage_id=target, text=body.note, choices=body.answers, questions=question_context, timestamp=db.now()))
+                s["answers"].append(dict(stage_id=target, text=body.note, choices=body.answers, questions=question_context, action=action, timestamp=db.now()))
+                if action=="answer":
+                    chosen={answer["question_id"] for answer in body.answers}
+                    for request in requests:
+                        if not chosen or request["id"] in chosen:
+                            s.setdefault("decision_ledger",[]).append(dict(stage_id=target,key=topic_key(request),question=request["question"],status="answered",answer=body.note))
                 if body.spec is not None:
                     s["spec"] = body.spec
                 else:
@@ -168,7 +204,7 @@ def studio_router(store, workflow, delivery):
                     if artifact["stage_id"] in affected:
                         artifact["superseded"] = True
                 feedback = dict(scope="internal" if target == stage else "cross_stage", source_stage=stage,
-                                target_stage=target, reason=body.note, affected_stages=affected+["planning", "confirmation"])
+                                target_stage=target, stage_id=target, source_node="confirm" if status in ("needs_input", "needs_resolution", "awaiting_confirmation") else next((item["node_id"] for item in reversed(s["executions"]) if item["stage_id"]==stage and item["node_id"]!="artifact"), None), target_node="generate" if s["stages"][target].get("seed_discussion") else "collaborate", trigger=action, epoch=s["stages"][target]["epoch"], resolved=False, timestamp=db.now(), reason=body.note, affected_stages=affected+["planning", "confirmation"])
                 s["feedback"].append(feedback)
                 s.update(stage=target, status="running", error=None, pause_requested=False, plan_ref=None, step_remaining=None)
                 s.pop("execution", None)

@@ -29,8 +29,8 @@ class PlanningAdapter:
     def validate(self, ref):
         return self.handlers["/plans/{pid}/validate"](ref["plan_id"], Revision(revision=ref["revision"]))
 
-    def compile(self, ref):
-        return self.handlers["/plans/{pid}/compile"](ref["plan_id"], CompileRequest(revision=ref["revision"]))
+    def compile(self, ref, config=None):
+        return self.handlers["/plans/{pid}/compile"](ref["plan_id"], CompileRequest(revision=ref["revision"], config=config))
 
     def confirm(self, ref, execution_id):
         return self.handlers["/plans/{pid}/confirm"](ref["plan_id"], Confirmation(revision=ref["revision"], execution_plan_id=execution_id))

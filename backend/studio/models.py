@@ -42,9 +42,18 @@ class DecisionOption(BaseModel):
 class DecisionRequest(BaseModel):
     id: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,39}$")
     question: str = Field(min_length=1, max_length=2000)
+    topic_key: str = Field(default="", max_length=120)
+    category: Literal["ordinary", "scope", "acceptance", "constraint"] = "scope"
     recommendation: str = Field(default="", max_length=2000)
     options: list[DecisionOption] = Field(default_factory=list, max_length=4)
     impact: str = Field(default="", max_length=2000)
+
+class AIDecision(BaseModel):
+    question: str
+    choice: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    impact: str
+    topic_key: str = ""
 
 class Synthesis(BaseModel):
     summary: str = Field(min_length=1)
@@ -54,8 +63,10 @@ class Synthesis(BaseModel):
     disagreements: list[str] = Field(default_factory=list)
     decision_requests: list[DecisionRequest] = Field(default_factory=list, max_length=5)
     decisions: list[Decision] = Field(default_factory=list)
+    ai_decisions: list[AIDecision] = Field(default_factory=list, max_length=30)
 
 class Issue(BaseModel):
+    category: Literal["ordinary", "scope", "acceptance", "constraint", "technical"] = "technical"
     id: str
     severity: Literal["blocking", "warning"]
     message: str

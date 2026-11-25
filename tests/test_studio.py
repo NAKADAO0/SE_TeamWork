@@ -84,6 +84,30 @@ class StudioTests(unittest.TestCase):
         self.assertEqual(exported.json()['execution'],state['execution'])
         self.assertEqual(self.mock.call_count,30) # 3 x (role selection + 3 proposals + synthesis + review)
 
+    def test_resource_recompile_snapshot_lock_and_manual_execution_boundary(self):
+        rid = self.create()
+        for _ in range(3):
+            self.command(rid, 'start')
+            self.command(rid, 'confirm')
+        before = self.command(rid, 'start')
+        config = dict(max_concurrency=1, role_capacity=dict(backend=1, frontend=1, qa=1))
+        state = self.command(rid, 'compile', config=config)
+        self.assertEqual(state['execution']['config']['max_concurrency'], 1)
+        self.assertTrue(all(len(batch) <= 1 for batch in state['execution']['batches']))
+        self.assertNotEqual(before['execution']['execution_plan_id'], state['execution']['execution_plan_id'])
+        old = self.client.get(f'/studio/runs/{rid}?sequence={before["sequence"]}').json()
+        self.assertEqual(old['execution'], before['execution'])
+        stale = self.client.post(f'/studio/runs/{rid}/commands', json=dict(action='compile', expected_sequence=before['sequence'], config=config))
+        self.assertEqual(stale.status_code, 409)
+        with patch('backend.agent_bridge.lab1_request') as dispatch:
+            confirmed = self.command(rid, 'confirm')
+            dispatch.assert_not_called()
+        self.assertEqual(confirmed['status'], 'complete')
+        denied = self.client.post(f'/studio/runs/{rid}/commands', json=dict(action='compile', expected_sequence=confirmed['sequence'], config=config))
+        self.assertEqual(denied.status_code, 409)
+        exported = self.client.get(f'/plans/{state["plan_ref"]["plan_id"]}/export?revision=1').json()
+        self.assertEqual(exported['execution'], state['execution'])
+
     def test_reviewer_receives_real_proposals_and_gate_uses_consolidated_questions(self):
         def questions(kind,context,role=None):
             result=model(kind,context,role)
@@ -125,7 +149,10 @@ class StudioTests(unittest.TestCase):
         rid=self.create();state=self.command(rid,'start')
         self.assertEqual(state['status'],'needs_input',state.get('error'))
         self.assertEqual(len(state['artifacts']),3)
-        self.assertEqual(len(state['feedback']),2)
+        self.assertEqual(sum(f.get('trigger')=='automatic_revision' for f in state['feedback']),2)
+        self.assertEqual(state['feedback'][0]['source_node'],'generate')
+        self.assertEqual(state['feedback'][0]['target_node'],'collaborate')
+        self.assertTrue(all(f['resolved'] for f in state['feedback']))
         self.assertEqual(sum(c.args[0]=='review' for c in self.mock.call_args_list),3)
         self.assertEqual(sum(c.args[0]=='proposal' for c in self.mock.call_args_list),6)
 
@@ -149,9 +176,100 @@ class StudioTests(unittest.TestCase):
             return result
         self.mock.side_effect=disagree
         rid=self.create();state=self.command(rid,'start')
-        self.assertEqual(state['status'],'needs_input',state.get('error'))
+        self.assertEqual(state['status'],'awaiting_confirmation',state.get('error'))
         self.assertEqual(sum(c.args[0]=='synthesis' for c in self.mock.call_args_list),3)
         self.assertEqual(sum(c.args[0]=='proposal' for c in self.mock.call_args_list),9)
+        self.assertEqual(state['stages']['requirements']['discussion_notes'],['平台能力尚无证据'])
+        self.assertTrue(state['stages']['requirements']['review']['passed'])
+
+    def test_advisory_disagreements_do_not_block_any_front_stage(self):
+        def advisory(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='synthesis':result['disagreements']=['窗口暂采用两小时，后续校准','删除备份的实现由架构阶段验证']
+            if kind=='review':result.update(issues=[dict(id='NOTE',severity='warning',category='technical',message='实现验证尚未完成',requires_user=False)])
+            return result
+        self.mock.side_effect=advisory
+        rid=self.create()
+        for stage in ('requirements','product','architecture'):
+            state=self.command(rid,'start')
+            self.assertEqual(state['status'],'awaiting_confirmation',state.get('error'))
+            self.assertEqual(state['stages'][stage]['questions'],[])
+            self.assertEqual(state['stage_budgets'][stage]['used'],0)
+            self.assertEqual(len(state['stages'][stage]['discussion_notes']),2)
+            self.assertFalse(state['stages'][stage]['provisional'])
+            self.command(rid,'confirm')
+
+    def test_real_user_conflict_blocks_even_when_review_says_passed(self):
+        def conflict(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='synthesis':result['disagreements']=['违规次数和异常次数的口径不同']
+            if kind=='review':result.update(issues=[dict(id='SCOPE',severity='blocking',category='scope',message='违规次数不能直接等同异常次数，需要用户裁决',requires_user=True)])
+            return result
+        self.mock.side_effect=conflict
+        rid=self.create();state=self.command(rid,'start')
+        self.assertEqual(state['status'],'needs_input')
+        self.assertFalse(state['stages']['requirements']['review']['passed'])
+        self.assertEqual(state['stages']['requirements']['discussion_notes'],[])
+        response=self.client.post('/studio/runs/'+rid+'/commands',json=dict(action='accept_risk',expected_sequence=state['sequence'],note='直接忽略'))
+        self.assertEqual(response.status_code,409)
+
+    def test_inconsistent_review_uses_bounded_repairs_without_empty_question_gate(self):
+        def inconsistent(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='review':result.update(passed=False,issues=[])
+            return result
+        self.mock.side_effect=inconsistent
+        rid=self.create();state=self.command(rid,'start')
+        self.assertEqual(state['status'],'needs_resolution')
+        self.assertEqual(sum(c.args[0]=='review' for c in self.mock.call_args_list),3)
+        self.assertFalse(state['stages']['requirements']['review']['passed'])
+        self.assertEqual(state['stage_budgets']['requirements']['used'],0)
+
+    def test_declared_critical_conflict_cannot_be_mislabelled_as_no_user_needed(self):
+        def conflict(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='review':result.update(issues=[dict(id='SCOPE',severity='blocking',category='scope',message='存在范围冲突',requires_user=False)])
+            return result
+        self.mock.side_effect=conflict
+        rid=self.create();state=self.command(rid,'start')
+        self.assertEqual(state['status'],'needs_input')
+        self.assertTrue(state['stages']['requirements']['review']['issues'][0]['requires_user'])
+        response=self.client.post('/studio/runs/'+rid+'/commands',json=dict(action='accept_risk',expected_sequence=state['sequence'],note='忽略范围冲突'))
+        self.assertEqual(response.status_code,409)
+
+    def test_reassess_old_false_gate_uses_saved_review_without_new_calls(self):
+        rid=self.create();self.command(rid,'start')
+        def old_gate(state):
+            state['status']='needs_input'
+            state['stages']['requirements']['review']['passed']=False
+        storage.change(PlanStore(self.path),rid,'test.old_gate',mutate=old_gate)
+        before=self.read(rid);calls=len(self.mock.call_args_list)
+        after=self.command(rid,'reassess')
+        self.assertEqual(after['status'],'awaiting_confirmation')
+        self.assertEqual(len(self.mock.call_args_list),calls)
+        self.assertEqual(after['stage_budgets'],before['stage_budgets'])
+        self.assertFalse(after['stages']['requirements'].get('confirmed',False))
+        self.assertEqual(after['artifacts'],before['artifacts'])
+
+    def test_reassess_rejects_changed_artifact_and_real_questions(self):
+        rid=self.create();self.command(rid,'start')
+        def changed(state):
+            state['status']='needs_input'
+            state['stages']['requirements']['draft']['spec']['product']='尚未审查的新方案'
+        storage.change(PlanStore(self.path),rid,'test.changed',mutate=changed)
+        before=self.read(rid)
+        response=self.client.post('/studio/runs/'+rid+'/commands',json=dict(action='reassess',expected_sequence=before['sequence']))
+        self.assertEqual(response.status_code,409)
+        self.assertEqual(self.read(rid),before)
+        def ask(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='synthesis':result['questions']=['确认范围']
+            return result
+        self.mock.side_effect=ask
+        rid=self.create();before=self.command(rid,'start')
+        response=self.client.post('/studio/runs/'+rid+'/commands',json=dict(action='reassess',expected_sequence=before['sequence']))
+        self.assertEqual(response.status_code,409)
+        self.assertEqual(self.read(rid),before)
 
     def test_program_gate_rejects_changed_imported_scope_even_when_model_passes(self):
         def change_scope(kind,context,role=None):
@@ -174,7 +292,9 @@ class StudioTests(unittest.TestCase):
         self.assertFalse(state['stages']['architecture'].get('confirmed',False))
         self.assertGreater(len(state['artifacts']),len(before['artifacts']))
         self.assertTrue(any(a['superseded'] for a in state['artifacts']))
-        self.assertEqual(state['feedback'][-1]['scope'],'cross_stage')
+        cross=next(f for f in state['feedback'] if f['scope']=='cross_stage')
+        self.assertEqual(cross['target_node'],'collaborate')
+        self.assertEqual(cross['target_stage'],'product')
         snapshot=self.client.get(f"/studio/runs/{rid}?sequence={before['sequence']}").json()
         self.assertEqual(snapshot,before)
 
@@ -202,6 +322,7 @@ class StudioTests(unittest.TestCase):
         state=self.command(rid,'resume')
         self.assertEqual(state['status'],'awaiting_confirmation')
         self.assertEqual(sum(c.args[0]=='proposal' for c in self.mock.call_args_list),6)
+        self.assertEqual(sum(f.get('trigger')=='peer_discussion' for f in state['feedback']),1)
 
     def test_bad_model_response_is_failed_not_silently_simulated(self):
         self.mock.side_effect=ValueError('模型 JSON 无效')
@@ -268,6 +389,10 @@ class StudioTests(unittest.TestCase):
         after=self.command(rid,'replan',target_stage='requirements',note='补充验收条件',spec=edited)
         self.assertEqual([call.args[0] for call in self.mock.call_args_list[count:]],['synthesis','review'])
         self.assertEqual(after['status'],'awaiting_confirmation')
+        returned=next(f for f in after['feedback'] if f.get('trigger')=='replan')
+        self.assertEqual((returned['source_node'],returned['target_node']),('confirm','generate'))
+        self.assertEqual(returned['epoch'],after['stages']['requirements']['epoch'])
+        self.assertTrue(returned['resolved'])
         self.assertFalse(after['stages']['requirements'].get('confirmed',False))
         self.assertEqual(after['stages']['requirements']['draft']['spec'],edited)
         self.assertGreater(len(after['artifacts']),len(before['artifacts']))
@@ -294,6 +419,89 @@ class StudioTests(unittest.TestCase):
             provider.return_value.complete.return_value=json.dumps(dict(summary='只列了风险，没有方案',evidence=[],risks=[],questions=[],disagreements=[]))
             with self.assertRaisesRegex(Exception,'返回格式无效'):
                 call_model('proposal',{},dict(id='business',name='业务分析',focus='需求'))
+
+    def test_stage_budget_two_answers_then_provisional_and_explicit_confirmation(self):
+        def keeps_asking(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='synthesis':
+                number=len(context['answers'])+1
+                result.update(questions=[f'关键选择{number}'],decision_requests=[dict(id='Q1',question=f'关键选择{number}',topic_key=f'topic-{number}',category='scope',recommendation='先采用可调整的最小方案',options=[],impact='最终确认可修改')])
+            return result
+        self.mock.side_effect=keeps_asking
+        rid=self.create();state=self.command(rid,'start')
+        self.assertEqual(state['status'],'needs_input')
+        self.command(rid,'answer',note='第一轮回答')
+        state=self.command(rid,'answer',note='第二轮回答')
+        self.assertEqual(state['stage_budgets']['requirements'],dict(used=2,limit=2))
+        self.assertEqual(state['status'],'awaiting_confirmation')
+        self.assertEqual(state['stages']['requirements']['questions'],[])
+        self.assertTrue(state['stages']['requirements']['provisional'])
+        self.assertFalse(state['stages']['requirements']['review']['passed'])
+        response=self.client.post('/studio/runs/'+rid+'/commands',json=dict(action='confirm',expected_sequence=state['sequence']))
+        self.assertEqual(response.status_code,409)
+        state=self.command(rid,'confirm',acknowledge_provisional=True)
+        self.assertEqual(state['stage'],'product')
+        self.assertEqual(state['stage_budgets']['requirements']['used'],2)
+
+    def test_manual_edit_does_not_reset_or_consume_stage_budget(self):
+        rid=self.create();self.command(rid,'start')
+        self.command(rid,'answer',note='主动补充要求')
+        state=self.read(rid)
+        self.assertEqual(state['stage_budgets']['requirements']['used'],1)
+        edited=state['stages']['requirements']['draft']['spec']
+        state=self.command(rid,'replan',note='直接编辑',spec=edited)
+        self.assertEqual(state['stage_budgets']['requirements']['used'],1)
+
+    def test_explicit_extra_round_extends_only_chosen_stage(self):
+        rid=self.create();self.command(rid,'start')
+        state=self.command(rid,'extend_clarification',note='我主动要求额外澄清')
+        self.assertEqual(state['stage_budgets']['requirements'],dict(used=0,limit=3))
+        self.assertNotIn('product',state['stage_budgets'])
+
+    def test_already_answered_topic_cannot_reopen_automatic_question(self):
+        def repeat(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='synthesis':result.update(questions=['相同问题'],decision_requests=[dict(id='Q1',question='相同问题',topic_key='same-topic',category='scope',recommendation='保守方案',options=[],impact='可调整')])
+            return result
+        self.mock.side_effect=repeat
+        rid=self.create();self.command(rid,'start')
+        state=self.command(rid,'answer',note='已经明确回答')
+        self.assertEqual(state['status'],'awaiting_confirmation')
+        self.assertEqual(state['stages']['requirements']['questions'],[])
+
+    def test_bad_output_is_repaired_once_with_field_diagnostics(self):
+        valid=dict(summary='通过',passed=True,issues=[])
+        with patch('backend.studio.runtime.HttpProvider.from_env') as provider:
+            provider.return_value.complete.side_effect=['{}',json.dumps(valid)]
+            self.assertEqual(call_model('review',{}),valid)
+            self.assertEqual(provider.return_value.complete.call_count,2)
+
+    def test_ordinary_details_do_not_open_human_answer_round(self):
+        def ordinary(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='synthesis' and not context['convergence'].get('resolve_ordinary_only'):
+                result.update(questions=['按钮间距'],decision_requests=[dict(id='Q1',question='按钮间距',category='ordinary',recommendation='采用常规间距',options=[],impact='可调整')])
+            return result
+        self.mock.side_effect=ordinary
+        rid=self.create();state=self.command(rid,'start')
+        self.assertEqual(state['status'],'awaiting_confirmation')
+        self.assertEqual(state['stage_budgets']['requirements']['used'],0)
+        self.assertEqual(state['stages']['requirements']['questions'],[])
+        self.assertTrue(state['stages']['requirements']['ai_decisions'])
+
+    def test_explicit_baseline_conflict_cannot_be_waived_by_exhausted_budget(self):
+        def conflict(kind,context,role=None):
+            result=model(kind,context,role)
+            if kind=='synthesis':result['spec']['scope']['included'].append('未经用户要求的支付')
+            return result
+        self.mock.side_effect=conflict
+        rid=self.create()
+        storage.change(PlanStore(self.path),rid,'test.budget',mutate=lambda state:state.update(stage_budgets={'requirements':dict(used=2,limit=2)}))
+        state=self.command(rid,'start')
+        self.assertEqual(state['status'],'needs_resolution')
+        self.assertFalse(state['stages']['requirements']['provisional'])
+        response=self.client.post('/studio/runs/'+rid+'/commands',json=dict(action='confirm',expected_sequence=state['sequence'],acknowledge_provisional=True))
+        self.assertEqual(response.status_code,409)
 
     def test_model_output_shape_is_checked(self):
         with patch('backend.studio.runtime.HttpProvider.from_env') as provider:
