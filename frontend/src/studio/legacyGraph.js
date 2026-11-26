@@ -186,12 +186,18 @@ function render(plan, run) {
       ['验收条件', task.acceptance],
       ...(effortText ? [['工作量估算', effortText]] : []),
     ];
-    scope.querySelector('#detail').innerHTML = `<h2>任务详情</h2><div class="reference">${labels.get(id)} · ${escape(id)}</div><h3>${escape(task.title)}</h3>${statusBadge(statusOf(id))}${execution[id]?.reason ? `<p class="state-reason state-${statusOf(id)}">${escape(execution[id].reason)}</p>` : ''}<dl>${fields.map(([label, value]) => `<div><dt>${label}</dt><dd>${escape(text(value))}</dd></div>`).join('')}</dl>`;
+    scope.querySelector('#detail').innerHTML = `<header class="task-detail-heading"><h2>任务详情</h2><button type="button" data-close-task aria-label="关闭任务详情" title="关闭任务详情"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></header><div class="reference">${labels.get(id)} · ${escape(id)}</div><h3>${escape(task.title)}</h3>${statusBadge(statusOf(id))}${execution[id]?.reason ? `<p class="state-reason state-${statusOf(id)}">${escape(execution[id].reason)}</p>` : ''}<dl>${fields.map(([label, value]) => `<div><dt>${label}</dt><dd>${escape(text(value))}</dd></div>`).join('')}</dl>`;
   }
   view.onclick = event => {
+    if (event.target.closest('[data-close-task]')) {
+      setDetailOpen(false);
+      scope.querySelector('#board .node[aria-pressed="true"]')?.focus({preventScroll:true});
+      return;
+    }
     const button = event.target.closest('[data-task]');
     if (button) {
       select(button.dataset.task);
+      setDetailOpen(true);
       if (button.classList.contains('task-item')) {
         const node = [...board.querySelectorAll('[data-task]')].find(node => node.dataset.task === button.dataset.task);
         if (node) {
@@ -199,6 +205,8 @@ function render(plan, run) {
           canvas.scrollTop = Math.max(0, node.offsetTop * graphZoom - canvas.clientHeight / 2 + 54 * graphZoom);
         }
       }
+      if (detailBelow.matches)
+        scope.querySelector('#detail').scrollIntoView({block:'nearest'});
     }
   };
   draw();
@@ -257,6 +265,14 @@ setGraphZoom(1);
 // Keep a narrow edge handle visible so collapsed panes can always be restored.
 const graphLayout = scope.querySelector('.graph-layout');
 const resizeCallbacks = new Set();
+function setDetailOpen(open) {
+  scope.querySelector('.detail-shell').hidden = !open;
+  scope.querySelector('#detail').hidden = !open;
+  graphLayout.classList.toggle('detail-collapsed', !open);
+  scope.querySelector('#toggle-detail').setAttribute('aria-expanded', String(open));
+  if (open) resizeCallbacks.forEach(fn => fn());
+}
+
 const detailBelow = { get matches() { return host.clientWidth <= 850; }, addEventListener(type, fn) { resizeCallbacks.add(fn); } };
 new ResizeObserver(() => resizeCallbacks.forEach(fn => fn())).observe(host);
 for (const [buttonId, panelId, className, label] of [
@@ -325,7 +341,7 @@ for (const handle of scope.querySelectorAll('[data-resize]')) {
     handle.setAttribute('aria-orientation', height ? 'horizontal' : 'vertical');
     handle.setAttribute('aria-label', `调整${left ? '任务列表' : '任务详情'}${height ? '高度' : '宽度'}`);
     handle.setAttribute('aria-valuemin', String(height ? 120 : left ? 180 : 200));
-    handle.setAttribute('aria-valuemax', String(height ? 480 : left ? 420 : 440));
+    handle.setAttribute('aria-valuemax', String(height ? 480 : left ? 420 : 560));
     handle.setAttribute('aria-valuenow', String(Math.round(height ? shell.getBoundingClientRect().height : shell.getBoundingClientRect().width)));
   }
   detailBelow.addEventListener('change', updateOrientation);
@@ -337,7 +353,7 @@ for (const handle of scope.querySelectorAll('[data-resize]')) {
     const beside = !detailBelow.matches;
     const room = height ? graphLayout.clientHeight - 400 - 8
       : graphLayout.clientWidth - (beside ? other.getBoundingClientRect().width : 0) - 280 - 16;
-    const max = Math.max(min, Math.min(height ? 480 : left ? 420 : 440, room));
+    const max = Math.max(min, Math.min(height ? 480 : left ? 420 : 560, room));
     const size = Math.min(max, Math.max(min, Math.round(value)));
     graphLayout.style.setProperty(height ? '--detail-height' : left ? '--task-width' : '--detail-width', `${size}px`);
     handle.setAttribute('aria-valuenow', String(size));
@@ -384,7 +400,9 @@ function centerSelected() {
  const node = scope.querySelector('#board .node[aria-pressed="true"]');
  if(node) { canvas.scrollLeft = Math.max(0,node.offsetLeft*graphZoom-canvas.clientWidth/2+94*graphZoom); canvas.scrollTop = Math.max(0,node.offsetTop*graphZoom-canvas.clientHeight/2+54*graphZoom); }
 }
+setDetailOpen(false);
 return {
+ reset() { selectedId=undefined; signature=undefined; setDetailOpen(false); },
  update(plan, execution, run) {
    const next = JSON.stringify([plan, execution, run?.id, run?.cursor, run?.status, run?.results]);
    if (next === signature) return;
