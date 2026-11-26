@@ -7,7 +7,7 @@ const roleName = { backend:"服务端", frontend:"界面", qa:"测试与验证" 
 const groupKey = (key) => key?.startsWith("package:") ? key.slice(8) : null;
 export const isPackageStage = (key) => typeof key === "string" && /^package:[A-Za-z0-9_-]{1,20}$/.test(key);
 
-function edgePath(from, to, opposite, index, width) {
+export function edgePath(from, to, opposite, index, width) {
   const spread = opposite ? 7 : 0;
   const forward = from.cx < to.cx;
   if (Math.abs(from.cy - to.cy) < 3) {
@@ -23,7 +23,9 @@ function edgePath(from, to, opposite, index, width) {
   }
   const down = from.cy < to.cy;
   const sx = from.cx + (down ? spread : -spread), tx = to.cx + (down ? spread : -spread);
-  if (Math.abs(from.cy-to.cy) > 270) {
+  // Adjacent tall cards still use a curved join. Only routes skipping a row
+  // need the outer lane; a fixed threshold misclassified wrapped card text.
+  if (Math.abs(from.cy-to.cy) > Math.max(from.bottom-from.top, to.bottom-to.top) + 100) {
     const lane = width - 7 - index % 3 * 7;
     const a = down ? from.bottom + 12 : from.top - 12;
     const b = down ? to.top - 12 : to.bottom + 12;

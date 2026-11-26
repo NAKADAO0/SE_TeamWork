@@ -90,7 +90,7 @@ export function mountAgentExecution(root, onChange) {
 
   const notePrefix = () => scope ? `【工作包 ${scope.id}：${scope.title}】` : "";
 
-  function publish() { render(); onChange(run); }
+  function publish() { render(); onChange(run, { loading, error }); }
 
   async function request(load, { interactive = false, restoring = false } = {}) {
     const target = context;
@@ -98,7 +98,10 @@ export function mountAgentExecution(root, onChange) {
     clearTimeout(timer);
     const sequence = ++serial;
     loading = interactive;
-    if (interactive) render();
+    if (interactive) {
+      error = "";
+      publish();
+    }
     let success = false;
     try {
       const next = await load(target);

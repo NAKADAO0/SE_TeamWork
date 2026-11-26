@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SE Studio · 工作流控制台</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="src/studio/studio.css?v=20261126-graph2" />
+  </head>
+  <body>
+    <aside class="sidebar" aria-label="项目与阶段导航">
+      <a class="brand" href="studio.html"
+        ><svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <path
+            d="M5 5h7v7H5zM16 16h7v7h-7zM16 5h7v7h-7zM8.5 12v7.5H16M12 8.5h4"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linejoin="round"
+          /></svg
+        ><strong>SE Studio</strong></a
+      >
+      <div class="workspace-label">软件工程工作区</div>
+      <button id="new-run" type="button" class="new-run">
+        <span aria-hidden="true">＋</span>新建运行
+      </button>
+      <label class="run-picker"
+        >运行记录<select id="runs">
+          <option value="">选择运行</option>
+        </select></label
+      >
+      <section class="stage-navigation">
+        <h2>项目流程</h2>
+        <div class="stage-track">
+          <nav id="stages" class="stages" aria-label="全局阶段"></nav>
+          <div id="global-feedback" aria-label="跨阶段反馈路径" hidden></div>
+        </div>
+      </section>
+      <footer class="sidebar-footer">
+        <a href="index.html">原编排工作台 <span aria-hidden="true">↗</span></a
+        ><a href="../examples.html"
+          >规格样例 <span aria-hidden="true">↗</span></a
+        ><span>SE Workflow · 本地工作区</span>
+      </footer>
+    </aside>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="breadcrumb">
+          <span class="workspace-label">工作区</span><span>/</span>
+          <details class="project-details">
+            <summary title="查看项目详情"><h1 id="project-name">创建项目工作流</h1><svg viewBox="0 0 16 16" width="12" height="12" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+            <div class="project-details-panel"><strong>项目详情</strong><p id="run-caption">从一个需求开始，让每一步设计都有依据。</p></div>
+          </details>
+          <span class="runbar-context">规划与设计</span>
+        </div>
+        <div class="topbar-actions">
+          <button id="toggle-stages" type="button" aria-expanded="false">
+            项目流程</button
+          ><button
+            id="toggle-events"
+            type="button"
+            aria-expanded="false"
+            aria-controls="runtime-events"
+            disabled
+          >
+            <svg
+              viewBox="0 0 18 18"
+              width="15"
+              height="15"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M3 4h12M3 9h12M3 14h8"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              /></svg
+            >运行事件<span id="event-count" class="event-count">0</span></button
+          ><a href="../guide.html">使用指南</a>
+        </div>
+      </header>
+      <main>
+        <p id="notice" role="status" aria-live="polite" hidden></p>
+        <div id="run-failure" class="issue" role="alert" hidden></div>
+        <form id="intake" class="intake">
+          <div class="intake-copy">
+            <div>
+              <h2>描述你要构建的项目</h2>
+              <p>
+                输入需求，或继续已有设计。我们会逐步形成方案，并在关键阶段交由你确认。
+              </p>
+            </div>
+            <label
+              >输入类型<select id="input-mode">
+                <option value="requirements">原始需求</option>
+                <option value="spec">已有设计规格</option>
+              </select></label
+            >
+          </div>
+          <div class="intake-editor">
+            <label for="source">项目需求或设计说明书</label
+            ><textarea
+              id="source"
+              rows="10"
+              maxlength="60000"
+              required
+              placeholder="例如：为学校设计一个场地预约系统。学生可以查看空闲时段、提交预约并取消预约，管理员负责管理场地。&#10;&#10;也可以写下目标用户、验收条件，以及明确不做的内容。"
+            ></textarea>
+          </div>
+          <div class="intake-footer">
+            <label class="file-label"
+              >导入文件<input
+                id="file"
+                type="file"
+                accept=".txt,.md,.json" /></label
+            ><span class="file-hint">TXT、Markdown、JSON</span>
+            <div class="actions">
+              <span id="connection">正在检查模型配置…</span
+              ><button class="primary" type="submit">
+                创建运行 <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+        </form>
+        <section id="workspace" hidden>
+          <div class="controlbar">
+            <div class="run-summary">
+              <span id="run-status" class="status"></span
+              ><span id="monitor"></span>
+            </div>
+            <div id="controls" class="actions"></div>
+          </div>
+          <p id="feedback" class="feedback" hidden></p>
+          <div class="workbench content-first">
+            <section class="stage-content-panel">
+              <header class="panel-heading">
+                <div>
+                  <h2 id="stage-title">阶段内容</h2>
+                  <p id="stage-caption"></p>
+                </div>
+                <div class="actions">
+                  <label class="history-toggle"
+                    ><input
+                      id="follow"
+                      type="checkbox"
+                      checked
+                    />跟随执行</label
+                  ><button id="toggle-flow" type="button" aria-expanded="false">
+                    查看执行结构
+                  </button>
+                </div>
+              </header>
+              <nav
+                id="stage-steps"
+                class="stage-steps"
+                aria-label="阶段内容与执行状态"
+              ></nav>
+              <section id="flow-structure" class="flow-structure" hidden>
+                <div class="structure-toolbar">
+                  <span>实际执行节点与反馈路径</span
+                  ><label class="history-toggle"
+                    ><input
+                      id="show-feedback"
+                      type="checkbox"
+                    />历史反馈路径</label
+                  >
+                </div>
+                <div id="canvas" class="canvas"></div>
+              </section>
+              <div id="stage-alert" hidden></div>
+              <section class="stage-document" aria-label="节点详情">
+                <header class="document-heading">
+                  <h2 id="detail-title">阶段方案</h2>
+                  <span id="detail-state"></span>
+                </header>
+                <div id="details"></div>
+                <section id="dag" hidden></section>
+                <section id="execution-workspace" hidden></section>
+                <div id="stage-actions"></div>
+              </section>
+            </section>
+          </div>
+          <aside
+            id="runtime-events"
+            class="timeline event-drawer"
+            aria-label="运行事件侧栏"
+            hidden
+          >
+            <header class="panel-heading">
+              <div>
+                <h2>运行事件</h2>
+                <p id="replay-caption">实时观察</p>
+              </div>
+              <button
+                id="toggle-log"
+                type="button"
+                aria-label="收起运行事件"
+                title="收起运行事件"
+              >
+                <svg
+                  viewBox="0 0 18 18"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="m6 4 5 5-5 5"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </header>
+            <div class="event-tools">
+              <label class="event-search-label"
+                >筛选事件<input
+                  id="event-search"
+                  type="search"
+                  placeholder="搜索节点、阶段或错误"
+              /></label>
+              <div class="replay-controls">
+                <label for="replay">历史回放</label
+                ><input
+                  id="replay"
+                  type="range"
+                  min="1"
+                  max="1"
+                  value="1"
+                /><button id="live" type="button">返回实时</button>
+              </div>
+            </div>
+            <ol id="events" aria-label="事件列表"></ol>
+            <footer class="event-footer">
+              <span id="event-shown"></span
+              ><button id="export-trace" type="button">导出完整记录</button>
+            </footer>
+          </aside>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="src/studio/main.js?v=20261126-graph2"></script>
+  </body>
+</html>

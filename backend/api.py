@@ -9,6 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .agent_bridge import agent_router
+from .studio import storage as studio_storage
+from .studio.api import studio_router
 from .delivery import delivery_router
 from .graph_api import graph_router
 from .review import review_router
@@ -30,6 +32,7 @@ def create_app(path=None, planner=None, validator=None, compiler=None):
     async def lifespan(app):
         store.initialize()
         initialize(store)
+        studio_storage.initialize(store)
         yield
 
     app = FastAPI(title="Lab2 计划服务", lifespan=lifespan)
@@ -95,8 +98,11 @@ def create_app(path=None, planner=None, validator=None, compiler=None):
         allow_headers=["Content-Type"],
     )
     app.include_router(graph_router(store))
-    app.include_router(workflow_router(store, planner))
-    app.include_router(delivery_router(store, validator, compiler))
+    workflow = workflow_router(store, planner)
+    delivery = delivery_router(store, validator, compiler)
+    app.include_router(workflow)
+    app.include_router(delivery)
+    app.include_router(studio_router(store, workflow, delivery))
     app.include_router(review_router(store))
     app.include_router(agent_router(store))
 
