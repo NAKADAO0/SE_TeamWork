@@ -8,7 +8,14 @@ import {
   questionMarkup,
 } from "./content.js";
 
+import { executionGraph, graphFeedback } from "./executionGraph.js";
+import { mountExecutionWorkspace } from "./executionWorkspace.js";
+import { roleName, taskDetail } from "./taskViews.js";
 const $ = (id) => document.getElementById(id);
+const executionWorkspace = mountExecutionWorkspace($("execution-workspace"));
+let resourceDraft = null;
+const resourceKey = () => viewed?.plan_ref ? `${viewed.id}:${viewed.plan_ref.plan_id}:${viewed.plan_ref.revision}:${viewed.execution?.execution_plan_id}` : null;
+const resourceDirty = () => resourceDraft?.key === resourceKey() && resourceDraft.dirty;
 const labels = {
   ready: "待启动",
   running: "运行中",
@@ -17,6 +24,7 @@ const labels = {
   failed: "执行失败",
   awaiting_confirmation: "等待人工确认",
   needs_input: "需要你的决定",
+  needs_resolution: "待处理明确冲突",
   complete: "执行计划已确认",
   confirming: "正在确认计划",
 };
@@ -26,8 +34,8 @@ const nodeLabels = {
   artifact: "产物版本",
   review: "独立审查",
   confirm: "人工确认与决策",
-  spec_adapter: "复用规格契约",
-  plan: "原 PM 任务规划",
+  spec_adapter: "整理设计规格",
+  plan: "生成任务计划",
   validate: "契约与依赖校验",
   compile: "资源编排",
 };
@@ -49,9 +57,13 @@ const eventLabels = {
   "command.resume": "继续",
   "command.pause": "请求暂停",
   "command.confirm": "人工确认",
+  "command.reassess": "重新检查推进条件",
   "command.step": "单步执行",
   "command.accept_risk": "人工接受风险",
   "plan.confirmed": "执行计划已确认",
+  "compile.started": "重新计算执行批次",
+  "compile.failed": "执行批次计算失败",
+  "plan.recompiled": "资源配置与批次已更新",
 };
 let definition,
   liveRun,
@@ -64,6 +76,7 @@ let definition,
   replaying = false,
   timer,
   plan;
+const provisionalAcknowledged = new Set();
 let editing = false,
   editBase;
 let rid = new URL(location.href).searchParams.get("run");
@@ -125,9 +138,11 @@ function stageStatus(stage) {
   if (viewed.stages[stage]?.confirmed) return "done";
   if (stage === "planning" && viewed.plan_ref) return "done";
   if (stage === "confirmation" && viewed.status === "complete") return "done";
+  if (stage === "execution" && viewed.status === "complete") return "active";
   if (stage === viewed.stage)
     return [
       "needs_input",
+      "needs_resolution",
       "failed",
       "awaiting_confirmation",
       "paused",
@@ -139,6 +154,7 @@ function stageStatus(stage) {
 function render() {
   if (!viewed) return;
   document.body.dataset.runStatus = viewed.status;
+  document.body.dataset.stage = selectedStage;
   $("workspace").hidden = false;
   $("toggle-events").disabled = false;
   $("intake").hidden = true;
@@ -155,6 +171,11 @@ function render() {
     )
     .join("");
   $("run-status").textContent = labels[viewed.status] ?? viewed.status;
+  $("run-failure").hidden = viewed.status !== "failed";
+  $("run-failure").innerHTML =
+    viewed.status === "failed"
+      ? `<strong>执行故障：${h(nodeLabels[viewed.executions.filter((item) => item.status === "failed").at(-1)?.node_id] ?? "当前节点")}</strong><p>${h(viewed.error ?? "请查看运行事件中的失败原因")}</p><small>可重试失败节点；已完成结果会复用。这不是要求你补充需求。</small>`
+      : "";
   const active = viewed.executions.filter((e) => e.status === "running").length;
   $("monitor").textContent =
     `${Object.values(viewed.stages).filter((s) => s.confirmed).length} / 3 阶段已确认 · ${active} 个活跃调用 · ${viewed.feedback.length} 次反馈`;
@@ -165,24 +186,38 @@ function render() {
     }
     if (["ready", "paused", "failed"].includes(viewed.status))
       commands.push(
-        `<button class="primary" data-command="${viewed.status === "ready" ? "start" : "resume"}">${viewed.status === "ready" ? "启动" + stageLabel(viewed.stage) : "继续运行"}</button>`,
+        `<button class="primary" data-command="${viewed.status === "ready" ? "start" : "resume"}">${viewed.status === "ready" ? "启动" + stageLabel(viewed.stage) : viewed.status === "failed" ? "重试失败节点" : "继续运行"}</button>`,
       );
     if (viewed.status === "running")
       commands.push('<button data-command="pause">暂停运行</button>');
     if (viewed.status === "awaiting_confirmation")
       commands.push(
-        `<button class="primary" data-command="confirm">确认${viewed.stage === "confirmation" ? "执行计划" : "本阶段产物"}</button>`,
+        viewed.stage === "confirmation" && (selectedStage !== "confirmation" || selectedNode !== "confirm")
+          ? '<button class="primary" data-open-final>核对并确认计划</button>'
+          : `<button class="primary" data-command="confirm">确认${viewed.stage === "confirmation" ? "执行计划" : "本阶段产物"}</button>`,
       );
   }
   $("controls").innerHTML = commands.join("");
   $("controls")
     .querySelectorAll("button")
-    .forEach((b) => (b.disabled = busy));
+    .forEach(
+      (b) =>
+        (b.disabled =
+          busy ||
+          (b.dataset.command === "confirm" && viewed.stage === "confirmation" && (resourceDirty() || viewed.execution?.compiled === false)) ||
+          (b.dataset.command === "confirm" &&
+            viewed.stages[viewed.stage]?.provisional &&
+            !provisionalAcknowledged.has(ackKey()))),
+    );
   $("stage-title").textContent = stageLabel(selectedStage);
+  document.querySelector(".runbar-context").textContent = ["execution", "delivery"].includes(selectedStage) ? "开发与交付" : "规划与设计";
   $("stage-caption").textContent =
-    selectedStage === "execution" || selectedStage === "delivery"
-      ? "本轮范围截至执行计划；后续能力从原工作台进入。"
-      : `按职责出案与讨论${stageInfo().round ? " · 第 " + stageInfo().round + " 轮审查" : ""}`;
+    ({planning: "查看任务职责与开发范围。", confirmation: "设置执行资源，计算批次后确认计划。", execution: "查看工作包与任务关系，手动开始执行。", delivery: "检查开发产物，完成代码审查与人工审核。"})[selectedStage]
+      ?? `按职责出案与讨论${stageInfo().round ? " · 第 " + stageInfo().round + " 轮审查" : ""}`;
+  const limit = viewed.stage_budgets?.[selectedStage] ?? stageInfo().budget;
+  if (limit)
+    $("stage-caption").textContent +=
+      ` · 人工答疑 ${limit.used}/${limit.limit} 轮`;
   const cross = viewed.feedback.filter((f) => f.scope === "cross_stage").at(-1);
   $("feedback").hidden =
     !cross ||
@@ -192,16 +227,28 @@ function render() {
       `跨阶段修订：${stageLabel(cross.source_stage)} 返回 ${stageLabel(cross.target_stage)}。${cross.reason}`;
   renderGlobalFeedback();
   const needsDecision =
-    selectedStage === viewed.stage && viewed.status === "needs_input";
+    selectedStage === viewed.stage &&
+    (["needs_input", "needs_resolution"].includes(viewed.status) ||
+      stageInfo().provisional);
   $("stage-alert").hidden = !needsDecision || selectedNode === "confirm";
   $("stage-alert").innerHTML = needsDecision
-    ? "<span>本阶段需要你的决定。可选择 AI 建议，也可自由补充。</span><button data-open-confirm>处理待确认问题</button>"
+    ? stageInfo().provisional
+      ? "<span>AI 已形成暂定方案，请核对选择与影响后最终确认。</span><button data-open-confirm>核对 AI 暂定事项</button>"
+      : "<span>本阶段需要你的决定。可选择 AI 建议，也可自由补充。</span><button data-open-confirm>处理待确认问题</button>"
     : "";
   renderSteps();
   renderGraph();
   renderDetail();
   renderStageActions();
   renderDag();
+  const executionStage = ["execution", "delivery"].includes(selectedStage);
+  const currentPlan = planForView();
+  const confirmed = viewed.status === "complete";
+  executionWorkspace.update(executionStage && currentPlan && viewed.execution ? {plan: {...currentPlan.plan, ...viewed.plan_ref}, execution: viewed.execution, stage: selectedStage, readonly: replaying, confirmed} : null);
+  $("details").hidden = executionStage && Boolean(currentPlan && viewed.execution);
+  document.querySelector(".document-heading").hidden = executionStage && Boolean(currentPlan && viewed.execution);
+  $("toggle-flow").hidden = executionStage;
+  if (executionStage) $("flow-structure").hidden = true;
   renderEvents();
 }
 function renderGlobalFeedback() {
@@ -213,16 +260,16 @@ function renderGlobalFeedback() {
   const shown = feedbackVisible ? cross : active.slice(-1);
   $("global-feedback").hidden = !shown.length;
   if (!shown.length) return;
-  const source = definition.stages.findIndex(
-    (s) => s.id === shown.at(-1).source_stage,
-  );
-  const target = definition.stages.findIndex(
-    (s) => s.id === shown.at(-1).target_stage,
-  );
-  const x1 = source * 137.5 + 68.75,
-    x2 = target * 137.5 + 68.75;
-  $("global-feedback").innerHTML =
-    `<svg viewBox="0 0 1100 48" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="global-back" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10" fill="#b76724"/></marker></defs><path d="M${x1} 3 V28 H${x2} V3" fill="none" stroke="#b76724" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#global-back)"/></svg><span>${h(stageLabel(shown.at(-1).source_stage))} 返回 ${h(stageLabel(shown.at(-1).target_stage))}</span>`;
+  const nodeLabel = (stage, node) =>
+    definition.subworkflows[stage]?.nodes.find((item) => item.id === node)
+      ?.label;
+  $("global-feedback").innerHTML = shown
+    .map((item) => {
+      const sourceNode = nodeLabel(item.source_stage, item.source_node);
+      const targetNode = nodeLabel(item.target_stage, item.target_node);
+      return `<span>${h(stageLabel(item.source_stage))}${sourceNode ? " / " + h(sourceNode) : ""} 返回 ${h(stageLabel(item.target_stage))}${targetNode ? " / " + h(targetNode) : ""}<small>${h(item.reason ?? "")}</small></span>`;
+    })
+    .join("");
 }
 function preferredNode(stage) {
   if (stage === "confirmation")
@@ -244,7 +291,7 @@ function renderSteps() {
   $("stage-steps").innerHTML = nodes
     .map(
       (node) =>
-        `<button type="button" class="step-tab" data-node="${node.id}" data-status="${node.id === "discussion" ? (stageInfo().draft?.decisions?.length ? "succeeded" : "waiting") : nodeStatus(node.id)}" aria-pressed="${selectedNode === node.id && !selectedTask}"><span class="step-status" aria-hidden="true"></span>${h(labels[node.id] ?? node.label)}</button>`,
+        `<button type="button" class="step-tab" data-node="${node.id}" data-status="${node.id === "discussion" ? (stageInfo().draft?.decisions?.length ? "succeeded" : "waiting") : nodeStatus(node.id)}" aria-pressed="${selectedNode === node.id}"><span class="step-status" aria-hidden="true"></span>${h(selectedStage === "confirmation" ? ({validate:"计划校验",compile:"资源配置与排程",confirm:"确认执行计划"}[node.id] ?? node.label) : labels[node.id] ?? nodeLabels[node.id] ?? node.label)}</button>`,
     )
     .join("");
 }
@@ -259,56 +306,22 @@ function renderGraph() {
       `<div class="empty"><strong>${selectedStage === "input" ? "输入已保存" : "后续执行入口保留"}</strong><p>${selectedStage === "input" ? "查看本页保存的原始输入。" : "本轮不自动执行代码开发与交付。"}</p></div>`;
     return;
   }
-  const front = ["requirements", "product", "architecture"].includes(
-    selectedStage,
+  const width = Math.max(240, $("canvas").clientWidth - 24);
+  const feedback = graphFeedback(viewed, selectedStage, feedbackVisible);
+  $("canvas").innerHTML = executionGraph(
+    flow,
+    feedback,
+    width,
+    nodeStatus,
+    selectedTask ? null : selectedNode,
   );
-  const positions = front
-    ? {
-        collaborate: [4, 20],
-        generate: [37, 20],
-        review: [37, 150],
-        confirm: [70, 150],
-      }
-    : Object.fromEntries(flow.nodes.map((n, i) => [n.id, [4 + i * 32, 70]]));
-  let lines = "";
-  for (const edge of flow.edges) {
-    const [x1, y1] = positions[edge.source],
-      [x2, y2] = positions[edge.target];
-    const feedback = edge.type === "feedback";
-    const occurred = viewed.feedback.some(
-      (f) => f.scope === "internal" && f.stage_id === selectedStage,
-    );
-    if (
-      feedback &&
-      !((occurred && viewed.stage === selectedStage) || feedbackVisible)
-    )
-      continue;
-    // Coordinates use a fixed viewBox matching node anchor percentages.
-    const ax = x1 * 6 + 85,
-      ay = y1 + 64,
-      bx = x2 * 6 + 85,
-      by = y2;
-    const d = feedback
-      ? `M${x1 * 6 + 170} ${y1 + 32} H${x1 * 6 + 195} V${y2 + 32} H${x2 * 6 + 170}`
-      : y1 === y2
-        ? `M${x1 * 6 + 170} ${y1 + 32} H${x2 * 6}`
-        : `M${ax} ${ay} V${by}`;
-    lines += `<path d="${d}" fill="none" stroke="${feedback ? "#b76724" : "#b2bbc9"}" stroke-width="2" ${feedback ? 'stroke-dasharray="6 5"' : ""} marker-end="url(#${feedback ? "back" : "next"})"/>`;
-  }
-  $("canvas").innerHTML =
-    `<div class="graph-inner"><svg viewBox="0 0 600 250" preserveAspectRatio="none" aria-hidden="true"><defs>${["next", "back"].map((id, i) => `<marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10" fill="${i ? "#b76724" : "#b2bbc9"}"/></marker>`).join("")}</defs>${lines}</svg>${flow.nodes
-      .map((n) => {
-        const [x, y] = positions[n.id];
-        return `<button class="flow-node" style="left:${x}%;top:${y}px" data-node="${n.id}" data-status="${nodeStatus(n.id)}" aria-pressed="${selectedNode === n.id && !selectedTask}"><strong>${h(n.label)}</strong><small>${{ waiting: "待处理", running: "进行中", succeeded: "已完成", failed: "失败" }[nodeStatus(n.id)]}</small></button>`;
-      })
-      .join("")}</div>`;
 }
 function renderDetail() {
-  $("detail-title").textContent = selectedTask
+  $("detail-title").textContent = selectedTask && selectedStage !== "planning"
     ? "任务详情"
     : (nodeLabels[selectedNode] ?? "节点详情");
   $("detail-state").textContent = replaying ? "历史只读" : "";
-  if (selectedTask) {
+  if (selectedTask && selectedStage !== "planning") {
     const task = planForView()?.plan?.tasks.find((t) => t.id === selectedTask);
     $("details").innerHTML = task
       ? `<h3>${h(task.title)}</h3><p>${h(task.id)} · ${h(task.role)}</p><p>${h(task.description)}</p><h3>验收条件</h3>${list(Array.isArray(task.acceptance) ? task.acceptance : [task.acceptance])}<h3>依赖与交接</h3>${code(task.depends_on)}<h3>输入与产物</h3>${code({ inputs: task.inputs, outputs: task.outputs })}`
@@ -321,7 +334,11 @@ function renderDetail() {
   }
   if (["execution", "delivery"].includes(selectedStage)) {
     $("details").innerHTML =
-      "<p>保留原工作台的 Agent 执行与代码审查能力。</p>" + oldLink();
+      "<p>完成任务规划并确认计划后，可在这里查看工作包、任务图谱和执行产物。</p>";
+    return;
+  }
+  if (selectedStage === "confirmation") {
+    renderResources();
     return;
   }
   const info = stageInfo();
@@ -370,13 +387,18 @@ function renderDetail() {
     content = `<h3>${result.compiled ? "编排成功" : "编排受阻"}</h3><p>${result.nodes?.length ?? 0} 个任务 · ${result.batches?.length ?? 0} 个资源批次</p><h3>并发与角色容量</h3>${code(result.config)}<h3>阻塞原因</h3>${result.blocked?.length ? code(result.blocked) : "<p>无阻塞项</p>"}<details><summary>完整编排结果</summary>${code(result)}</details>`;
   } else if (selectedNode === "plan" && planForView()) {
     content =
-      "<h3>原 PM 生成的任务</h3>" +
+      "<h3>任务清单</h3>" +
       planForView()
         .plan.tasks.map(
           (task) =>
-            `<article class="record"><strong>${h(task.title)}</strong><p>${h(task.id)} · ${h(task.role)}</p><p>${h(task.description)}</p></article>`,
+            `<button type="button" class="planning-task" data-task="${h(task.id)}" aria-pressed="${selectedTask === task.id}"><small>${h(task.id)} · ${h(roleName(task.role))}</small><strong>${h(task.title)}</strong><span>${h(task.description)}</span></button>`,
         )
         .join("");
+    const tasks = planForView().plan.tasks;
+    const task = tasks.find(t => t.id === selectedTask);
+    content = `<div class="planning-layout ${task ? "has-detail" : ""}"><div>${content}</div>${task ? `<aside class="execution-detail"><header><strong>任务详情</strong><button type="button" data-close-task>关闭</button></header>${taskDetail(task, tasks, null)}</aside>` : ""}</div>`;
+  } else if (selectedNode === "spec_adapter") {
+    content = `<h3>任务规划依据</h3><p>根据已确认的设计规格拆解开发任务。</p>${specMarkup(viewed.spec, "architecture")}`;
   } else if (latest?.output) {
     content = code(latest.output);
   }
@@ -407,9 +429,6 @@ function issues(items = []) {
     )
     .join("");
 }
-function oldLink() {
-  return `<div class="export-links"><a href="index.html${viewed.plan_ref ? "?plan=" + encodeURIComponent(viewed.plan_ref.plan_id) + "&revision=" + viewed.plan_ref.revision : ""}">在原工作台查看</a></div>`;
-}
 function renderStageActions() {
   let html = "";
   const current = selectedStage === viewed.stage;
@@ -433,73 +452,94 @@ function renderStageActions() {
     const ref = viewed.plan_ref;
     html += `<div class="export-links"><a href="/plans/${encodeURIComponent(ref.plan_id)}/export?revision=${ref.revision}&format=json" download>导出计划 JSON</a><a href="/plans/${encodeURIComponent(ref.plan_id)}/export?revision=${ref.revision}&format=markdown" download>导出计划 Markdown</a></div>`;
   }
+
+  const info = stageInfo();
   if (
-    viewed.plan_ref &&
-    ["planning", "confirmation", "execution", "delivery"].includes(
-      selectedStage,
+    current &&
+    !replaying &&
+    front &&
+    viewed.status === "needs_input" &&
+    !info.questions?.length &&
+    !info.review?.issues?.some(
+      (item) => item.severity === "blocking" || item.requires_user,
     )
   )
-    html += oldLink();
+    html =
+      '<div class="issue warning"><p>没有列出待回答问题。可使用已保存的审查结果重新检查推进条件；不会调用模型、消耗答疑额度或代你确认。</p><button data-reassess>重新检查推进条件</button></div>' +
+      html;
+  if (info.discussion_notes?.length)
+    html =
+      `<details><summary>讨论保留事项与后续验证</summary><p class="muted">本轮审查未将这些事项判为阻断；保留记录，不代表已经完成技术验证。</p>${list(info.discussion_notes)}</details>` +
+      html;
+  if (info.ai_decisions?.length)
+    html =
+      `<section class="ai-decisions"><h3>${info.provisional ? "AI 暂定方案与影响" : "AI 自主处理记录"}</h3>${info.ai_decisions.map((item) => `<article class="discussion-decision"><strong>${h(item.question)}</strong><p>采用：${h(item.choice)}</p><p>依据：${h(item.reason)}</p><p class="muted">影响：${h(item.impact)}</p></article>`).join("")}</section>` +
+      html;
+  if (current && info.provisional) {
+    html =
+      '<div class="issue"><strong>存在 AI 暂定事项，尚不等于审查通过</strong><p>请核对暂定选择与影响。确认后才进入下一阶段；也可编辑方案或主动追加澄清。</p></div>' +
+      html;
+    if (!replaying)
+      html += `<label class="provisional-ack"><input id="ack-provisional" type="checkbox" ${provisionalAcknowledged.has(ackKey()) ? "checked" : ""}>我已核对并接受 AI 暂定事项及其影响</label>`;
+  }
+  if (current && viewed.status === "needs_resolution")
+    html =
+      '<div class="issue"><strong>明确约束或程序校验仍冲突</strong><p>请编辑方案以保留明确要求，或主动追加一轮澄清。系统不会自行推翻约束。</p></div>' +
+      issues(info.hard_conflicts) +
+      html;
+  if (
+    current &&
+    front &&
+    !replaying &&
+    ["needs_resolution", "needs_input", "awaiting_confirmation"].includes(
+      viewed.status,
+    )
+  )
+    html +=
+      '<div class="editor-toolbar"><button data-extend>主动追加一轮澄清</button></div>';
   $("stage-actions").innerHTML = html;
   const documentPanel = document.querySelector(".stage-document");
-  if (current && viewed.status === "needs_input" && selectedNode === "confirm")
+  if (
+    current &&
+    selectedNode === "confirm" &&
+    (["needs_input", "needs_resolution"].includes(viewed.status) ||
+      info.provisional)
+  )
     documentPanel.insertBefore($("stage-actions"), $("details"));
   else documentPanel.append($("stage-actions"));
 }
 function renderDag() {
+  $("dag").hidden = true;
+}
+function renderResources() {
+  if (selectedNode === "validate") {
+    $("detail-title").textContent = "计划校验";
+    $("details").innerHTML = `<h3>${viewed.validation?.errors?.length ? "计划校验未通过" : "计划校验通过"}</h3><p>检查任务字段、需求覆盖与依赖结构。</p>${list(viewed.validation?.errors)}<details><summary>查看完整校验报告</summary>${code(viewed.validation)}</details>`;
+    return;
+  }
   const execution = viewed.execution;
-  $("dag").hidden =
-    !execution ||
-    selectedStage !== "confirmation" ||
-    !["compile", "confirm"].includes(selectedNode) ||
-    editing;
-  if ($("dag").hidden) return;
-  const tasks = planForView()?.plan?.tasks ?? [];
-  const columns = execution.topological_levels?.length
-    ? execution.topological_levels
-    : execution.batches;
-  const positions = new Map();
-  columns.forEach((ids, x) =>
-    ids.forEach((id, y) => positions.set(id, [x * 220 + 15, y * 90 + 15])),
-  );
-  const width = Math.max(560, columns.length * 220 + 10),
-    height = Math.max(130, ...columns.map((ids) => ids.length * 90 + 25));
-  const edges = execution.edges
-    .map((edge) => {
-      const source = positions.get(edge.from ?? edge.source),
-        target = positions.get(edge.to ?? edge.target);
-      if (!source || !target) return "";
-      const [x, y] = source,
-        [tx, ty] = target;
-      return `<path d="M${x + 185} ${y + 30} C${x + 210} ${y + 30} ${tx - 25} ${ty + 30} ${tx} ${ty + 30}" fill="none" stroke="#b2bbc9" stroke-width="1.5" marker-end="url(#task-next)"/>`;
-    })
-    .join("");
-  const graph = `<div class="task-viewport"><div class="task-canvas" style="width:${width}px;height:${height}px"><svg width="${width}" height="${height}" aria-hidden="true"><defs><marker id="task-next" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10" fill="#b2bbc9"/></marker></defs>${edges}</svg>${[
-    ...positions,
-  ]
-    .map(([id, [x, y]]) => {
-      const task = tasks.find((t) => t.id === id);
-      return `<button class="task-node" style="left:${x}px;top:${y}px" data-task="${h(id)}"><strong>${h(task?.title ?? id)}</strong><small>${h(id)} · ${h(task?.role ?? "任务")}</small></button>`;
-    })
-    .join("")}</div></div>`;
-  $("dag").innerHTML =
-    "<h3>任务 DAG 与资源批次</h3>" +
-    graph +
-    "<details><summary>资源批次 · " +
-    execution.batches.length +
-    " 批</summary>" +
-    execution.batches
-      .map(
-        (batch, i) =>
-          `<div class="batch"><strong>批次 ${i + 1}</strong>${batch
-            .map((id) => {
-              const task = tasks.find((t) => t.id === id);
-              return `<button data-task="${h(id)}">${h(task?.title ?? id)}<small>${h(id)} · ${h(task?.role ?? "任务")}</small></button>`;
-            })
-            .join("")}</div>`,
-      )
-      .join("") +
-    `</details><details class="dag-edges"><summary>真实依赖边 · ${execution.edges.length} 条</summary>${code(execution.edges)}</details><details><summary>资源等待原因</summary>${code(execution.batch_details ?? [])}</details>`;
+  if (!execution) {
+    $("details").innerHTML = "<p>任务计划正在校验，完成后可设置执行资源。</p>";
+    return;
+  }
+  if (selectedNode === "confirm") {
+    const config = execution.config ?? {};
+    const blocked = execution.compiled === false || resourceDirty() || viewed.validation?.errors?.length;
+    $("detail-title").textContent = "核对并确认执行计划";
+    const roles = Object.entries(config.role_capacity ?? {});
+    $("details").innerHTML = `<section class="final-plan"><div class="confirmation-intro"><h3>${viewed.status === "complete" ? "计划已确认" : "开发前的最后一次核对"}</h3><p>确认任务范围、执行资源和批次安排。确认后先展示工作包与任务图谱，由你点击「开始执行」才启动开发。</p></div><div class="final-plan-grid"><section><h3>计划范围</h3><dl><dt>开发任务</dt><dd>${execution.nodes.length} 项</dd><dt>任务依赖</dt><dd>${execution.edges.length} 条</dd><dt>执行批次</dt><dd>${execution.batches.length} 批</dd><dt>计划修订</dt><dd>r${h(viewed.plan_ref?.revision)}</dd></dl></section><section><h3>已保存的资源配置</h3><dl><dt>总并发上限</dt><dd>${h(config.max_concurrency)}</dd>${roles.map(([role,capacity]) => `<dt>${h(roleName(role))}容量</dt><dd>${h(capacity)}</dd>`).join("")}</dl><button type="button" data-open-resources>返回资源配置</button></section></div><div class="confirmation-checks"><p>${viewed.validation?.errors?.length ? "计划校验仍有问题" : "任务与依赖校验通过"}</p><p>${execution.compiled === false ? "资源编排受阻，请调整容量" : "执行批次已计算"}</p>${resourceDirty() ? '<p class="issue">资源配置尚未保存，请先返回资源配置重新计算。</p>' : ""}</div>${viewed.status === "complete" ? '<button type="button" data-open-execution class="primary">查看工作包与任务图谱 →</button>' : `<button type="button" data-confirm-plan class="primary" ${blocked || busy || replaying || viewed.status !== "awaiting_confirmation" ? "disabled" : ""}>确认计划，进入编排执行</button>`}</section>`;
+    return;
+  }
+  const locked = replaying || viewed.status !== "awaiting_confirmation" || busy;
+  const key = resourceKey();
+  if (!resourceDraft || resourceDraft.key !== key || !resourceDraft.dirty) {
+    resourceDraft = { key, config: structuredClone(execution.config ?? {max_concurrency: 2, role_capacity: {}}), dirty: false };
+  }
+  const config = resourceDraft.config;
+  const roles = [...new Set((planForView()?.plan?.tasks ?? []).map(t => t.role))];
+  const disable = locked ? "disabled" : "";
+  $("detail-title").textContent = "资源配置与排程";
+  $("details").innerHTML = `<div class="confirmation-intro"><h3>安排执行资源</h3><p>设置同时执行的任务数与各角色容量，重新计算批次后确认。确认后进入编排执行，由你手动开始开发。</p></div><form id="resource-form"><fieldset ${disable}><legend>并发配置</legend><div class="resource-fields"><label>总并发上限<input name="max_concurrency" type="number" min="1" max="100" step="1" required value="${h(config.max_concurrency ?? 2)}"><small>所有角色同时执行的任务总数</small></label>${roles.map(role => `<label>${h(roleName(role))}容量<input data-role-capacity="${h(role)}" type="number" min="0" max="100" step="1" required value="${h(config.role_capacity?.[role] ?? config.max_concurrency ?? 2)}"><small>该角色可同时执行的任务数</small></label>`).join("")}</div><div class="resource-footer"><span id="resource-state" role="status">${resourceDraft.dirty ? "配置已修改，请重新计算批次。" : "当前配置已计算执行批次。"}</span><button type="submit">重新计算批次</button></div></fieldset></form><section class="compile-overview"><h3>${execution.compiled === false ? "资源编排受阻" : "执行安排"}</h3><p>${execution.nodes.length} 个任务 · ${execution.edges.length} 条依赖 · ${execution.batches.length} 个批次</p>${execution.blocked?.length ? code(execution.blocked) : ""}<details><summary>查看批次任务清单</summary>${execution.batches.map((ids,i) => `<p>批次 ${i+1}：${ids.map(id => h(planForView()?.plan?.tasks.find(t => t.id === id)?.title ?? id)).join("、")}</p>`).join("")}</details><details><summary>校验与资源等待记录</summary>${code({validation: viewed.validation, batch_details: execution.batch_details})}</details></section>${viewed.status === "complete" ? '<button type="button" data-open-execution class="primary">查看工作包与任务图谱 →</button>' : ''}`;
 }
 function renderEvents() {
   const all = events.filter((e) => e.sequence <= viewed.sequence);
@@ -565,8 +605,9 @@ async function loadRun(id, { initial = false } = {}) {
     if (rid !== id) return;
     if (!replaying) {
       viewed = state;
-      if (initial || (follow && selectedStage !== state.stage)) {
-        selectedStage = state.stage;
+      const destination = state.status === "complete" ? "execution" : state.stage;
+      if (initial || (follow && selectedStage !== destination)) {
+        selectedStage = destination;
         selectedTask = null;
         selectedNode = preferredNode(selectedStage);
       }
@@ -603,6 +644,7 @@ function poll() {
 }
 async function command(action, extra = {}) {
   if (busy || replaying) return;
+  if (action === "confirm" && liveRun.stage === "confirmation" && resourceDirty()) { notice("请先重新计算批次，再确认执行计划。"); return; }
   busy = true;
   render();
   notice();
@@ -612,7 +654,13 @@ async function command(action, extra = {}) {
       expected_sequence: liveRun.sequence,
       ...extra,
     });
+    if (action === "compile") resourceDraft = null;
     await loadRun(rid);
+    if (action === "confirm" && liveRun.status === "complete") {
+      selectedStage = "execution";
+      selectedTask = null;
+      selectedNode = preferredNode(selectedStage);
+    }
     await refreshRuns();
   } catch (e) {
     notice(e.message);
@@ -668,6 +716,7 @@ $("runs").onchange = () => {
   if ($("runs").value) openRun($("runs").value).catch((e) => notice(e.message));
 };
 $("new-run").onclick = () => {
+  $("run-failure").hidden = true;
   setEventsOpen(false);
   $("toggle-events").disabled = true;
   $("event-count").textContent = "0";
@@ -725,19 +774,52 @@ $("dag").onclick = (e) => {
   }
 };
 $("controls").onclick = (e) => {
+  if (e.target.closest("[data-open-final]")) { selectedStage = "confirmation"; selectedNode = "confirm"; selectedTask = null; render(); return; }
   const button = e.target.closest("[data-command]");
-  if (button) command(button.dataset.command);
+  if (button)
+    command(
+      button.dataset.command,
+      button.dataset.command === "confirm"
+        ? { acknowledge_provisional: provisionalAcknowledged.has(ackKey()) }
+        : {},
+    );
 };
+function ackKey() {
+  const info = viewed.stages[viewed.stage] ?? {};
+  return `${viewed.id}:${viewed.stage}:${info.epoch ?? 1}`;
+}
+$("stage-actions").addEventListener("change", (event) => {
+  if (event.target.id === "ack-provisional") {
+    if (event.target.checked) provisionalAcknowledged.add(ackKey());
+    else provisionalAcknowledged.delete(ackKey());
+    render();
+  }
+});
+$("stage-actions").addEventListener("click", (event) => {
+  if (event.target.closest("[data-reassess]")) command("reassess");
+  if (event.target.closest("[data-extend]"))
+    command("extend_clarification", {
+      note: "用户主动追加一轮澄清",
+      target_stage: selectedStage,
+    });
+});
 $("stage-actions").onclick = (e) => {
   const accept = e.target.closest("[data-accept-risk]");
   if (!accept && !e.target.closest("[data-replan]")) return;
   const note = $("answer").value;
-  if (!note.trim()) {
-    notice("请填写回答或修改原因。");
+  if (accept) {
+    const risks = (stageInfo().review?.issues || [])
+      .map((issue) => issue.message)
+      .filter(Boolean);
+    command("accept_risk", {
+      note:
+        note.trim() ||
+        `用户点击“明确接受当前风险”，接受本次审查列出的风险：${risks.join("；") || "当前审查风险"}`,
+    });
     return;
   }
-  if (accept) {
-    command("accept_risk", { note });
+  if (!note.trim()) {
+    notice("请填写回答或修改原因。");
     return;
   }
   let spec;
@@ -770,6 +852,19 @@ $("toggle-flow").onclick = () => {
   renderGraph();
 };
 $("details").onclick = async (event) => {
+  if (event.target.closest("[data-confirm-plan]")) { command("confirm"); return; }
+  if (event.target.closest("[data-open-resources]")) { selectedNode = "compile"; render(); return; }
+  const taskButton = event.target.closest("[data-task]");
+  if (taskButton && selectedStage === "planning") {
+    selectedTask = taskButton.dataset.task;
+    renderDetail();
+  }
+  if (event.target.closest("[data-close-task]")) { selectedTask = null; renderDetail(); }
+  if (event.target.closest("[data-open-execution]")) {
+    selectedStage = "execution";
+    selectedTask = null;
+    render();
+  }
   if (event.target.closest("[data-edit-spec]")) {
     editBase = structuredClone(stageInfo().draft.spec);
     editing = true;
@@ -792,6 +887,21 @@ $("details").onclick = async (event) => {
     await command("replan", { note, target_stage: selectedStage, spec });
   }
 };
+$("details").addEventListener("input", event => {
+  if (!event.target.closest("#resource-form") || replaying || !resourceDraft) return;
+  const form = $("resource-form");
+  resourceDraft.config.max_concurrency = Number(form.elements.max_concurrency.value);
+  resourceDraft.config.role_capacity = Object.fromEntries([...form.querySelectorAll("[data-role-capacity]")].map(input => [input.dataset.roleCapacity, Number(input.value)]));
+  resourceDraft.dirty = true;
+  $("resource-state").textContent = "配置已修改，请重新计算批次。";
+  $("controls").querySelectorAll('[data-command="confirm"]').forEach(b => { b.disabled = true; });
+});
+$("details").addEventListener("submit", event => {
+  if (event.target.id !== "resource-form") return;
+  event.preventDefault();
+  if (event.target.reportValidity() && !replaying && !busy)
+    command("compile", { config: resourceDraft.config });
+});
 $("stage-actions").addEventListener("click", async (event) => {
   const option = event.target.closest("[data-answer-option]");
   if (option) {
@@ -932,6 +1042,9 @@ document.addEventListener("keydown", (event) => {
 
 try {
   [definition] = await Promise.all([api("/studio/definition"), refreshRuns()]);
+  for (const flow of Object.values(definition.subworkflows)) {
+    for (const node of flow.nodes) if (nodeLabels[node.id]) node.label = nodeLabels[node.id];
+  }
   renderIdleStages();
   const health = await api("/health");
   $("connection").textContent = health.live_llm_configured
@@ -942,3 +1055,12 @@ try {
   notice("无法连接工作流服务：" + e.message);
   $("connection").textContent = "请通过 Python 后端打开本页";
 }
+
+let graphWidth = 0;
+new ResizeObserver((entries) => {
+  const width = Math.round(entries[0].contentRect.width);
+  if (width !== graphWidth) {
+    graphWidth = width;
+    if (viewed && !$("flow-structure").hidden) renderGraph();
+  }
+}).observe($("canvas"));

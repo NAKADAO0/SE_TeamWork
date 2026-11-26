@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>SE Studio · 工作流控制台</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="src/studio/studio.css" />
+    <link rel="stylesheet" href="src/studio/studio.css?v=20261126-graph2" />
   </head>
   <body>
     <aside class="sidebar" aria-label="项目与阶段导航">
@@ -83,6 +83,7 @@
           <span class="runbar-context">规划与设计</span>
         </section>
         <p id="notice" role="status" aria-live="polite" hidden></p>
+        <div id="run-failure" class="issue" role="alert" hidden></div>
         <form id="intake" class="intake">
           <div class="intake-copy">
             <div>
@@ -176,6 +177,7 @@
                 </header>
                 <div id="details"></div>
                 <section id="dag" hidden></section>
+                <section id="execution-workspace" hidden></section>
                 <div id="stage-actions"></div>
               </section>
             </section>
@@ -241,6 +243,6 @@
         </section>
       </main>
     </div>
-    <script type="module" src="src/studio/main.js"></script>
+    <script type="module" src="src/studio/main.js?v=20261126-graph2"></script>
   </body>
 </html>

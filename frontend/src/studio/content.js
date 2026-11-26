@@ -155,7 +155,10 @@ export function collectSpec(root, base) {
 }
 export function questionMarkup(info) {
   const requests = info.draft?.decision_requests?.length
-    ? info.draft.decision_requests
+    ? info.draft.decision_requests.filter(
+        (request) =>
+          !info.questions || info.questions.includes(request.question),
+      )
     : (info.questions ?? []).map((question, index) => ({
         id: "Q" + (index + 1),
         question,
