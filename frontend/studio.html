@@ -45,7 +45,12 @@
     <div class="app-shell">
       <header class="topbar">
         <div class="breadcrumb">
-          工作区 <span>/</span> <strong>工作流控制台</strong>
+          <span class="workspace-label">工作区</span><span>/</span>
+          <details class="project-details">
+            <summary title="查看项目详情"><h1 id="project-name">创建项目工作流</h1><svg viewBox="0 0 16 16" width="12" height="12" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+            <div class="project-details-panel"><strong>项目详情</strong><p id="run-caption">从一个需求开始，让每一步设计都有依据。</p></div>
+          </details>
+          <span class="runbar-context">规划与设计</span>
         </div>
         <div class="topbar-actions">
           <button id="toggle-stages" type="button" aria-expanded="false">
@@ -75,13 +80,6 @@
         </div>
       </header>
       <main>
-        <section class="runbar">
-          <div>
-            <h1 id="project-name">创建项目工作流</h1>
-            <p id="run-caption">从一个需求开始，让每一步设计都有依据。</p>
-          </div>
-          <span class="runbar-context">规划与设计</span>
-        </section>
         <p id="notice" role="status" aria-live="polite" hidden></p>
         <div id="run-failure" class="issue" role="alert" hidden></div>
         <form id="intake" class="intake">

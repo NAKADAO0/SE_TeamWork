@@ -6,6 +6,7 @@ import {
   editorMarkup,
   collectSpec,
   questionMarkup,
+  planningSpecMarkup,
 } from "./content.js";
 
 import { executionGraph, graphFeedback } from "./executionGraph.js";
@@ -13,6 +14,18 @@ import { mountExecutionWorkspace } from "./executionWorkspace.js";
 import { roleName, taskDetail } from "./taskViews.js";
 const $ = (id) => document.getElementById(id);
 const executionWorkspace = mountExecutionWorkspace($("execution-workspace"));
+const stageHeading = document.querySelector(".stage-content-panel > .panel-heading");
+const stageHeadingActions = stageHeading.querySelector(".actions");
+function compactExecutionHeading(compact) {
+  stageHeading.hidden = compact;
+  const follow = $("follow").closest("label");
+  if (compact) {
+    const toolbar = document.querySelector(".execution-toolbar");
+    toolbar.insertBefore(follow, toolbar.querySelector(".execution-launch"));
+  } else {
+    stageHeadingActions.prepend(follow);
+  }
+}
 let resourceDraft = null;
 const resourceKey = () => viewed?.plan_ref ? `${viewed.id}:${viewed.plan_ref.plan_id}:${viewed.plan_ref.revision}:${viewed.execution?.execution_plan_id}` : null;
 const resourceDirty = () => resourceDraft?.key === resourceKey() && resourceDraft.dirty;
@@ -95,12 +108,15 @@ async function api(path, body) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const value = await response.json();
-  if (!response.ok)
-    throw new Error(
+  if (!response.ok) {
+    const error = new Error(
       typeof value.detail === "string"
         ? value.detail
         : JSON.stringify(value.detail ?? value),
     );
+    error.status = response.status;
+    throw error;
+  }
   return value;
 }
 function notice(text = "") {
@@ -245,6 +261,7 @@ function render() {
   const currentPlan = planForView();
   const confirmed = viewed.status === "complete";
   executionWorkspace.update(executionStage && currentPlan && viewed.execution ? {plan: {...currentPlan.plan, ...viewed.plan_ref}, execution: viewed.execution, stage: selectedStage, readonly: replaying, confirmed} : null);
+  compactExecutionHeading(selectedStage === "execution" && Boolean(currentPlan && viewed.execution));
   $("details").hidden = executionStage && Boolean(currentPlan && viewed.execution);
   document.querySelector(".document-heading").hidden = executionStage && Boolean(currentPlan && viewed.execution);
   $("toggle-flow").hidden = executionStage;
@@ -317,6 +334,7 @@ function renderGraph() {
   );
 }
 function renderDetail() {
+  document.querySelector(".stage-document").classList.toggle("is-spec-reading", selectedStage === "planning" && selectedNode === "spec_adapter");
   $("detail-title").textContent = selectedTask && selectedStage !== "planning"
     ? "任务详情"
     : (nodeLabels[selectedNode] ?? "节点详情");
@@ -398,7 +416,7 @@ function renderDetail() {
     const task = tasks.find(t => t.id === selectedTask);
     content = `<div class="planning-layout ${task ? "has-detail" : ""}"><div>${content}</div>${task ? `<aside class="execution-detail"><header><strong>任务详情</strong><button type="button" data-close-task>关闭</button></header>${taskDetail(task, tasks, null)}</aside>` : ""}</div>`;
   } else if (selectedNode === "spec_adapter") {
-    content = `<h3>任务规划依据</h3><p>根据已确认的设计规格拆解开发任务。</p>${specMarkup(viewed.spec, "architecture")}`;
+    content = planningSpecMarkup(viewed.spec, matchMedia("(max-width: 850px)").matches);
   } else if (latest?.output) {
     content = code(latest.output);
   }
@@ -578,7 +596,19 @@ function renderEvents() {
     : "实时观察 · " + liveRun.sequence + " 条事件";
 }
 async function loadRun(id, { initial = false } = {}) {
-  const state = await api("/studio/runs/" + encodeURIComponent(id));
+  let state;
+  try {
+    state = await api("/studio/runs/" + encodeURIComponent(id));
+  } catch (error) {
+    if (rid !== id) return;
+    if (error.status !== 404) throw error;
+    $("new-run").click();
+    for (const option of $("runs").options)
+      if (option.value === id) option.remove();
+    $("runs").value = "";
+    notice("该运行记录已不存在，可能已清空数据库。已返回新建项目。其他记录可从左侧选择。");
+    return;
+  }
   if (rid !== id) return;
   const changed = liveRun?.sequence !== state.sequence;
   liveRun = state;
@@ -629,7 +659,7 @@ async function openRun(id) {
   url.searchParams.set("run", id);
   history.replaceState(null, "", url);
   await loadRun(id, { initial: true });
-  poll();
+  if (rid === id) poll();
 }
 function poll() {
   clearTimeout(timer);
@@ -716,6 +746,8 @@ $("runs").onchange = () => {
   if ($("runs").value) openRun($("runs").value).catch((e) => notice(e.message));
 };
 $("new-run").onclick = () => {
+  executionWorkspace.update(null);
+  compactExecutionHeading(false);
   $("run-failure").hidden = true;
   setEventsOpen(false);
   $("toggle-events").disabled = true;
@@ -733,6 +765,8 @@ $("new-run").onclick = () => {
   $("intake").hidden = false;
   $("project-name").textContent = "创建项目工作流";
   $("run-caption").textContent = "从一个需求开始，让每一步设计都有依据。";
+  document.querySelector(".runbar-context").textContent = "规划与设计";
+  document.querySelector(".project-details").open = false;
   renderIdleStages();
   document.querySelector(".sidebar").classList.remove("open");
   $("toggle-stages").setAttribute("aria-expanded", "false");
@@ -852,6 +886,20 @@ $("toggle-flow").onclick = () => {
   renderGraph();
 };
 $("details").onclick = async (event) => {
+  const sectionLink = event.target.closest("[data-spec-section]");
+  if (sectionLink) {
+    event.preventDefault();
+    const target = document.getElementById(sectionLink.dataset.specSection);
+    $("details").querySelectorAll("[data-spec-section]").forEach(link => {
+      if (link === sectionLink) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    });
+    if (target) {
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "start", behavior: "instant" });
+    }
+    return;
+  }
   if (event.target.closest("[data-confirm-plan]")) { command("confirm"); return; }
   if (event.target.closest("[data-open-resources]")) { selectedNode = "compile"; render(); return; }
   const taskButton = event.target.closest("[data-task]");
@@ -1005,6 +1053,8 @@ $("toggle-stages").onclick = () => {
   $("toggle-stages").setAttribute("aria-expanded", String(open));
 };
 document.addEventListener("click", (event) => {
+  if (!event.target.closest(".project-details"))
+    document.querySelector(".project-details").open = false;
   if (
     !event.target.closest(".sidebar") &&
     !event.target.closest("#toggle-stages")
@@ -1015,6 +1065,11 @@ document.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
+    const details = document.querySelector(".project-details");
+    if (details.open) {
+      details.open = false;
+      details.querySelector("summary").focus();
+    }
     document.querySelector(".sidebar").classList.remove("open");
     $("toggle-stages").setAttribute("aria-expanded", "false");
   }
@@ -1057,6 +1112,10 @@ try {
 }
 
 let graphWidth = 0;
+matchMedia("(max-width: 850px)").addEventListener("change", event => {
+  const outline = $("details").querySelector(".planning-spec-outline");
+  if (outline) outline.open = !event.matches;
+});
 new ResizeObserver((entries) => {
   const width = Math.round(entries[0].contentRect.width);
   if (width !== graphWidth) {

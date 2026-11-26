@@ -85,6 +85,22 @@ export function specMarkup(spec, stage) {
   );
   return output + "</div>";
 }
+export function planningSpecMarkup(spec, compact = false) {
+  const sections = [
+    ["requirements", "需求与验收", spec.requirements?.length ?? 0],
+    ["modules", "模块职责", spec.modules?.length ?? 0],
+    ["design", "接口、数据与系统设计", spec.design_items?.length ?? 0],
+    ["constraints", "约束", spec.constraints?.length ?? 0],
+  ];
+  let index = 0;
+  const document = specMarkup(spec, "architecture").replace(
+    '<div class="readable-spec">',
+    '<div class="readable-spec" id="planning-spec-overview" tabindex="-1">',
+  ).replaceAll('<section class="spec-section">', () =>
+    `<section class="spec-section" id="planning-spec-${sections[index++][0]}" tabindex="-1">`,
+  );
+  return `<div class="planning-spec-layout"><details class="planning-spec-outline" ${compact ? "" : "open"}><summary>规格目录</summary><nav aria-label="设计规格章节"><a href="#planning-spec-overview" data-spec-section="planning-spec-overview" aria-current="location"><span>项目概况</span></a>${sections.map(([id,title,count]) => `<a href="#planning-spec-${id}" data-spec-section="planning-spec-${id}"><span>${title}</span><small>${count}</small></a>`).join("")}</nav><p>任务规划将依据这些内容生成任务、依赖和验收条件。</p></details><article class="planning-spec-document" aria-label="设计规格正文" tabindex="0">${document}</article></div>`;
+}
 const field = (label, path, value, list = false) =>
   `<label>${h(label)}<textarea data-spec-path="${h(path)}" data-list="${list}" rows="${list ? 3 : 2}">${h(lines(value))}</textarea></label>`;
 export function editorMarkup(spec, stage) {

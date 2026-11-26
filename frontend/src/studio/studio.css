@@ -164,7 +164,7 @@ small,
 .brand strong {
   font-weight: 650;
 }
-.workspace-label {
+.sidebar .workspace-label {
   color: var(--muted);
   font-size: 12px;
   margin: 7px 8px 22px;
@@ -321,19 +321,6 @@ main {
   padding: 24px;
   max-width: 1900px;
   margin: auto;
-}
-.runbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-.runbar p {
-  font-size: 12px;
-  color: #626976;
-  margin-top: 5px;
-  overflow-wrap: anywhere;
 }
 .runbar-context {
   font-size: 12px;
@@ -936,9 +923,6 @@ details summary:hover {
     flex-direction: column;
     min-height: 0;
   }
-  .runbar {
-    flex-shrink: 0;
-  }
   #workspace {
     display: flex;
     flex-direction: column;
@@ -1003,9 +987,6 @@ details summary:hover {
   }
   main {
     padding: 28px 30px;
-  }
-  .runbar {
-    margin-bottom: 24px;
   }
   .canvas {
     padding: 36px 16px;
@@ -1117,14 +1098,8 @@ details summary:hover {
   main {
     padding: 20px 16px;
   }
-  .runbar {
-    margin-bottom: 18px;
-  }
   h1 {
     font-size: 21px;
-  }
-  .runbar p {
-    font-size: 12px;
   }
   .intake {
     margin-top: 10px;
@@ -2110,10 +2085,11 @@ body[data-run-status="running"] .status:before {
 
 /* Planning, resource confirmation and execution share the same document surface. */
 #execution-workspace { min-width: 0; }
-.execution-summary { color: #475b70; background: #f1f5fa; padding: 14px 16px; border-radius: 8px; font-size: 13px; line-height: 1.7; margin-bottom: 18px; }
+.execution-summary { color: #475b70; font-size: 12px; line-height: 1.6; }
+.execution-feedback { margin:0 0 10px; padding:8px 12px; border:1px solid #edc9c0; border-radius:6px; background:#fff5f2; color:#913b2b; font-size:13px; overflow-wrap:anywhere; }
 .execution-toolbar, .execution-switch, .execution-zoom { display: flex; align-items: center; gap: 8px; }
-.execution-toolbar { justify-content: space-between; flex-wrap: wrap; margin-bottom: 16px; }
-.execution-switch { gap: 3px; background: #eff2f7; border-radius: 8px; padding: 4px; }
+.execution-toolbar { justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 8px; }
+.execution-switch { gap: 3px; background: #eff2f7; border-radius: 6px; padding: 2px; }
 .execution-switch button { border: 0; background: transparent; color: #526275; }
 .execution-switch button[aria-pressed="true"] { background: #fff; color: #304db5; }
 .execution-zoom output { min-width: 42px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -2202,9 +2178,12 @@ body[data-run-status="running"] .status:before {
 .execution-package progress::-webkit-progress-value { background: #4a65c7; border-radius: 4px; }
 .execution-agent [data-agent-start] { display: none; }
 .execution-launch { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
-#execution-workspace.execution-expanded { position: fixed; inset: 18px; z-index: 80; overflow: auto; padding: 24px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
-.execution-expanded .execution-viewport { max-height: calc(100dvh - 240px); }
-@media (max-width: 600px) { #execution-workspace.execution-expanded { inset: 6px; padding: 14px; } }
+body.execution-canvas-open { overflow:hidden; }
+#execution-workspace.execution-expanded { position:fixed; inset:0; z-index:80; display:flex; flex-direction:column; overflow:hidden; padding:16px; background:#fff; border:0; border-radius:0; --execution-graph-height:100%; --execution-graph-min-height:0px; }
+.execution-expanded > .execution-toolbar, .execution-expanded > .execution-feedback { flex-shrink:0; }
+.execution-expanded > .legacy-graph-host, .execution-expanded > .legacy-packages-host { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
+.execution-expanded > .execution-agent, .execution-expanded > .execution-review { display:none; }
+@media (max-width:600px) { #execution-workspace.execution-expanded { padding:12px; } }
 .execution-viewport { cursor: grab; }
 .execution-viewport:active { cursor: grabbing; }
 .execution-viewport button { cursor: pointer; }
@@ -2227,3 +2206,80 @@ body[data-stage="execution"] .stage-document { padding:18px; }
 .confirmation-checks p { margin:7px 0; }
 @media(max-width:950px) { .planning-layout.has-detail { grid-template-columns:minmax(0,1fr); } .planning-layout .execution-detail { max-height:none; } }
 @media(max-width:600px) { .final-plan-grid { grid-template-columns:1fr; } body[data-stage="execution"] .stage-document { padding:12px; } }
+
+/* A chapter navigator gives the planning specification a clear reading frame. */
+.planning-spec-layout { display:grid; grid-template-columns:205px minmax(0,860px); gap:clamp(24px,4vw,64px); max-width:1200px; margin:0 auto; align-items:start; }
+.planning-spec-outline { position:sticky; top:0; padding:18px 0; border:0; color:#53647b; }
+.planning-spec-outline > summary { font-size:13px; font-weight:600; color:#344961; list-style:none; cursor:pointer; padding:0 12px 14px; }
+.planning-spec-outline > summary::-webkit-details-marker { display:none; }
+.planning-spec-outline nav { display:grid; gap:5px; }
+.planning-spec-outline nav a { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#53647b; text-decoration:none; padding:10px 12px; border-radius:6px; font-size:13px; line-height:1.6; }
+.planning-spec-outline nav a:hover { background:#f1f5fa; color:#244f64; }
+.planning-spec-outline nav a[aria-current] { background:#eaf3f6; color:#246d7e; font-weight:600; }
+.planning-spec-outline nav small { color:inherit; font-weight:400; font-variant-numeric:tabular-nums; }
+.planning-spec-outline > p { margin:24px 12px 0; padding-top:18px; border-top:1px solid var(--line); font-size:12px; line-height:1.9; }
+.planning-spec-document { min-width:0; padding:14px 0 40px; }
+.planning-spec-intro { margin-bottom:26px; padding-bottom:20px; border-bottom:1px solid var(--line); }
+.planning-spec-intro > span { font-size:13px; color:#26798a; font-weight:600; }
+.planning-spec-intro > p { margin:8px 0 0; font-size:13px; color:#53647b; line-height:1.8; }
+.planning-spec-document .readable-spec { max-width:none; }
+.planning-spec-document .readable-spec > h3 { font-size:22px!important; line-height:1.5; margin-bottom:14px!important; }
+.planning-spec-document .readable-spec > p { font-size:14px; line-height:1.95; color:#43556b; }
+.planning-spec-document .readable-spec .spec-section { margin:38px 0 0; scroll-margin-top:16px; outline:none; }
+.planning-spec-document .readable-spec .spec-section > h3 { font-size:17px!important; margin-bottom:12px!important; }
+.planning-spec-document .spec-row { grid-template-columns:64px minmax(0,1fr); gap:18px; padding:18px 0; }
+.planning-spec-document .spec-row strong { font-size:14px; line-height:1.9; }
+.planning-spec-document .spec-row p { font-size:13px; line-height:1.9; margin-top:8px; }
+.planning-spec-document [tabindex="-1"]:focus { outline:none; }
+@media(max-width:850px) {
+ .planning-spec-layout { grid-template-columns:minmax(0,1fr); gap:20px; }
+ .planning-spec-outline { position:static; border:1px solid var(--line); border-radius:8px; padding:12px; background:#f8fafc; }
+ .planning-spec-outline > summary { padding:0; display:flex; justify-content:space-between; }
+ .planning-spec-outline > summary::after { content:"展开"; font-weight:400; color:#53647b; }
+ .planning-spec-outline[open] > summary::after { content:"收起"; }
+ .planning-spec-outline[open] > summary { margin-bottom:12px; }
+ .planning-spec-outline > p { margin-top:12px; }
+ .planning-spec-document { padding-top:0; }
+}
+@media(max-width:500px) {
+ .planning-spec-document .spec-row { grid-template-columns:minmax(0,1fr); gap:7px; }
+}
+
+/* Project context shares the top bar; metadata is available without taking document height. */
+.topbar { gap:16px; }
+.breadcrumb { min-width:0; flex:1; }
+.breadcrumb > .workspace-label { color:var(--muted); white-space:nowrap; }
+.project-details { min-width:0; position:relative; }
+.project-details > summary { display:flex; align-items:center; gap:5px; min-height:32px; cursor:pointer; list-style:none; color:#3c414c; }
+.project-details > summary::-webkit-details-marker { display:none; }
+.project-details > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:3px; }
+.project-details h1 { font-size:13px; font-weight:600; margin:0; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.project-details summary svg { flex-shrink:0; }
+.project-details[open] summary svg { transform:rotate(180deg); }
+.project-details-panel { position:absolute; top:calc(100% + 8px); left:0; z-index:50; width:340px; max-width:calc(100vw - 32px); padding:14px 16px; background:var(--surface, #fff); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px #26344914; }
+.project-details-panel p { margin-top:6px; font-size:12px; color:#626976; overflow-wrap:anywhere; }
+.breadcrumb > .runbar-context { display:inline-flex; flex-shrink:0; color:#397482; }
+.topbar-actions { flex-shrink:0; }
+@media(max-width:760px) {
+ .topbar { gap:8px; }
+ .breadcrumb > .workspace-label, .breadcrumb > .workspace-label + span { display:none; }
+ .project-details h1 { font-size:12px; }
+ .breadcrumb > .runbar-context { font-size:11px; padding:3px 5px; }
+ .project-details-panel { position:fixed; top:56px; left:16px; }
+}
+
+/* On desktop only the specification text scrolls; the chapter column stays put. */
+.stage-document.is-spec-reading { display:flex; flex-direction:column; padding:20px 28px; overflow:hidden; }
+.stage-document.is-spec-reading > .document-heading { display:none; }
+.stage-document.is-spec-reading #details { flex:1; min-height:0; height:100%; overflow:hidden; }
+.is-spec-reading .planning-spec-layout { height:100%; min-height:0; align-items:stretch; }
+.is-spec-reading .planning-spec-outline { position:static; min-height:0; max-height:100%; overflow:auto; padding:2px 0 20px; }
+.is-spec-reading .planning-spec-document { min-height:0; height:100%; overflow:auto; padding:0 12px 32px 0; scrollbar-gutter:stable; outline-offset:2px; }
+.is-spec-reading .planning-spec-document .readable-spec > h3 { margin-top:0!important; }
+@media(max-width:850px) {
+ .stage-document.is-spec-reading { display:block; overflow:auto; padding:16px; }
+ .stage-document.is-spec-reading #details { height:auto; overflow:visible; }
+ .is-spec-reading .planning-spec-layout { height:auto; }
+ .is-spec-reading .planning-spec-outline { max-height:none; padding:12px; overflow:visible; }
+ .is-spec-reading .planning-spec-document { height:auto; overflow:visible; padding:0 0 24px; }
+}

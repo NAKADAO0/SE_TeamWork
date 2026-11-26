@@ -40,6 +40,8 @@ button:focus-visible,summary:focus-visible { outline:2px solid #4c69d1; outline-
 .branch-task { padding:12px; border:1px solid #d4e4e9; border-radius:8px; margin-top:8px; background:white; }
 .branch-task small,.branch-task strong { display:block; font-size:13px; }
 .branch-task small { color:#287a79; }
+:host([data-canvas-expanded]) .package-metrics,
+:host([data-canvas-expanded]) .package-branches { display:none; }
 @media(max-width:1200px) { .package-layout.has-detail { grid-template-columns:minmax(0,1fr); } .package-detail { position:static; max-height:none; } }
 @media(max-width:760px) { .wp-board { grid-template-columns:repeat(2,minmax(0,1fr)); min-width:0; } .orch-map { padding:14px; } .package-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:500px) { .wp-board { grid-template-columns:1fr; } .branch-join { flex-direction:column; align-items:stretch; } }
